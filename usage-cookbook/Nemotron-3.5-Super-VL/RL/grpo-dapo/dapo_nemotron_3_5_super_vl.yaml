@@ -1,0 +1,147 @@
+# Nemotron 3.5 Super VL (120B-A12B) DAPO/GRPO recipe on AutoModel (DTensor).
+#
+# Default topology: 16 nodes x 8 GPUs, with intranode EP=8 and colocated vLLM
+# TP/EP=8. On 4-GPU nodes, override gpus_per_node, DTensor EP, and vLLM TP/EP
+# together to 4. This is a text-only recipe: do not provide images.
+defaults: /shared/code/RL/examples/configs/grpo_math_1B.yaml
+
+grpo:
+  max_num_epochs: 2
+  val_at_start: true
+  use_dynamic_sampling: true
+  batch_multiplier: 3
+  overlong_filtering: true
+  use_leave_one_out_baseline: false
+  reward_scaling:
+    enabled: true
+    target_min: -1.0
+  reward_shaping:
+    enabled: true
+    overlong_buffer_length: 512
+    max_response_length: ${policy.generation.max_new_tokens}
+
+loss_fn:
+  reference_policy_kl_penalty: 0.0
+  use_importance_sampling_correction: true
+  truncated_importance_sampling_type: tis
+  truncated_importance_sampling_ratio: 2
+  ratio_clip_max: 0.28
+  ratio_clip_c: 10.0
+
+checkpointing:
+  checkpoint_dir: /shared/runs/nemotron-3.5-super-vl-dapo/checkpoints
+  metric_name: val:accuracy
+  higher_is_better: true
+  # Leave enough margin for an approximately 1.8 TB checkpoint before a
+  # four-hour Slurm allocation expires.
+  checkpoint_must_save_by: 00:03:20:00
+  keep_top_k: 2
+
+policy:
+  # Override model_name and tokenizer.name together for a local checkpoint.
+  model_name: nvidia/nemotron-3.5-super-pre-ea-text-08282026
+  # This AutoModel recipe accepts tokenizer text inputs only; image RL is not
+  # supported for Super VL on this backend.
+  is_vlm: false
+  tokenizer:
+    name: nvidia/nemotron-3.5-super-pre-ea-text-08282026
+  hf_config_overrides:
+    # Drop the checkpoint's MTP head on the training side.
+    num_nextn_predict_layers: 0
+  train_micro_batch_size: 1
+  logprob_batch_size: 1
+  logprob_chunk_size: 2048
+  max_total_sequence_length: 9216
+  make_sequence_length_divisible_by: 8
+  optimizer:
+    name: transformer_engine.pytorch.optimizers.fused_adam.FusedAdam
+    kwargs:
+      lr: 1.0e-06
+      weight_decay: 0.1
+      master_weights: true
+      store_param_remainders: true
+      exp_avg_dtype: torch.bfloat16
+      exp_avg_sq_dtype: torch.bfloat16
+  scheduler:
+  - name: torch.optim.lr_scheduler.LinearLR
+    kwargs:
+      start_factor: 1.0e-08
+      end_factor: 1.0
+      total_iters: 10
+  - name: torch.optim.lr_scheduler.ConstantLR
+    kwargs:
+      factor: 1.0
+      total_iters: 10000000000
+  - milestones:
+    - 10
+  dtensor_cfg:
+    expert_parallel_size: 8
+    activation_checkpointing: true
+    moe_parallelizer:
+      # Required with activation checkpointing for the BF16 MoE router.
+      ignore_router_for_ac: true
+    # Do not inject PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True. It can
+    # break the colocated trainer-to-vLLM CUDA IPC refit path.
+    automodel_kwargs:
+      # Keep force_hf unset: the custom AutoModel implementation and its
+      # state-dict adapter are required for expert parallelism and refit.
+      backend:
+        _target_: nemo_automodel.components.models.common.utils.BackendConfig
+        attn: te
+        linear: te
+        rms_norm: torch_fp32
+        experts: gmm
+        dispatcher: deepep
+        fake_balanced_gate: false
+        rope_fusion: false
+        enable_hf_state_dict_adapter: true
+  sequence_packing:
+    enabled: false
+  dynamic_batching:
+    enabled: true
+  generation:
+    max_new_tokens: 8192
+    vllm_cfg:
+      tensor_parallel_size: 8
+      expert_parallel_size: 8
+      gpu_memory_utilization: 0.5
+      enforce_eager: true
+      # Required for this architecture even for text-only prompts.
+      skip_tokenizer_init: false
+    vllm_kwargs:
+      moe_backend: triton
+      # Match the checkpoint's Mamba selective-state cache precision.
+      mamba_ssm_cache_dtype: float32
+      # This is a text-only run: avoid reserving image encoder-cache memory.
+      skip_mm_profiling: true
+      mm_processor_cache_gb: 0
+      limit_mm_per_prompt:
+        image: 1
+
+data:
+  max_input_seq_length: 2048
+  train:
+    dataset_name: DAPOMath17K
+  validation:
+    dataset_name: DAPOMathAIME2024
+  default:
+    prompt_file: null
+
+env:
+  math:
+    num_workers: 16
+    math_verify_impl: dapo_math_verify
+
+logger:
+  log_dir: /shared/runs/nemotron-3.5-super-vl-dapo/logs
+  wandb_enabled: true
+  tensorboard_enabled: true
+  monitor_gpus: true
+  wandb:
+    project: nemo-rl-super-3.5
+    name: dapo-nemotron3.5-super-vl-120BA12B-16n8g-automodel
+    log_nemo_gym_full_result_tables: false
+
+cluster:
+  gpus_per_node: 8
+  num_nodes: 16
