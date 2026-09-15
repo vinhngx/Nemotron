@@ -14,6 +14,47 @@ the cookbook configuration. Complete the common setup in
 > distributed text-only training; establish task-specific quality metrics before
 > scaling a training campaign.
 
+## Training goal and data
+
+The goal is to improve mathematical reasoning by optimizing sampled responses
+for verifiable final-answer correctness, rather than by supervised imitation of
+a reference solution. Training uses `DAPOMath17K`, a collection of mathematics
+problems with expected answers; the native `dapo_math_verify` reward function
+checks each generated answer against that expected result. `DAPOMathAIME2024`
+is used for validation, providing a held-out competition-math accuracy signal.
+
+## Shared-storage layout
+
+Mount the host shared-storage directory at `/shared` inside the container. The
+host-to-container mapping and layout are:
+
+```text
+</YOUR/SHARED/STORAGE> (login/head node)  -->  /shared (training container)
+```
+
+The container-side tree is therefore:
+
+```text
+/shared
+|____code
+|    |____RL                    <- NeMo RL, branch super-3.5-automodel
+|    |____Nemotron              <- Cookbook repository
+|____models
+|    |____NVIDIA-Nemotron-3.5-Super-EA-09112026
+|____runs
+|____.cache/huggingface
+```
+
+From the login/head node, define the host-side paths used by this guide. Do not
+use `/shared` on the login node; it is the container mount point.
+
+```bash
+export SHARED_ROOT=$(realpath </YOUR/SHARED/STORAGE>)
+export NEMO_RL="${SHARED_ROOT}/code/RL"
+export NEMOTRON_REPO="${SHARED_ROOT}/code/Nemotron"
+export MODEL_DIR="${SHARED_ROOT}/models/NVIDIA-Nemotron-3.5-Super-EA-09112026"
+export HF_HOME="${SHARED_ROOT}/.cache/huggingface"
+```
 
 ## Topology
 
@@ -130,26 +171,42 @@ For the intended 16-node x 4-GPU layout, submit the same recipe through
 checkpoint destination has multiple terabytes of available capacity.
 
 ```bash
+# Run on the login/head node, not inside the training container.
 export NUM_NODES=16
 export GPUS_PER_NODE=4
 export RUN_NAME=nemotron-3.5-super-vl-dapo-16n4g
-export RUN_DIR="${SHARED_ROOT}/runs/${RUN_NAME}"
-mkdir -p "${RUN_DIR}/logs" "${RUN_DIR}/checkpoints"
+export HOST_RUN_DIR="${SHARED_ROOT}/runs/${RUN_NAME}"
+mkdir -p "${HOST_RUN_DIR}/logs" "${HOST_RUN_DIR}/checkpoints"
 
+export SLURM_ACCOUNT=<SLURM_ACCOUNT>
+export PARTITION=<SLURM_PARTITION>
+export CONTAINER=<SITE_ACCESSIBLE_SUPER_VL_NEMO_RL_IMAGE>
+export MOUNTS="/lustre:/lustre,${SHARED_ROOT}:/shared"
+export BASE_LOG_DIR="${HOST_RUN_DIR}/slurm"
+export NRL_FORCE_REBUILD_VENVS=true
+export UV_LOCK_TIMEOUT=3600
+
+# Optional: load WANDB_API_KEY from a login-node-only environment file.
+# Do not place credentials in this guide, the recipe, or COMMAND.
 if [ -f "${SHARED_ROOT}/.env" ]; then set -a && source "${SHARED_ROOT}/.env" && set +a; fi
 
-export COMMAND="cd ${NEMO_RL} && \
+export CONTAINER_NEMO_RL=/shared/code/RL
+export CONTAINER_RECIPE=/shared/code/Nemotron/usage-cookbook/Nemotron-3.5-Super-VL/RL/grpo-dapo/dapo_nemotron_3_5_super_vl.yaml
+export CONTAINER_MODEL_DIR=/shared/models/NVIDIA-Nemotron-3.5-Super-EA-09112026
+export CONTAINER_RUN_DIR="/shared/runs/${RUN_NAME}"
+
+export COMMAND="cd ${CONTAINER_NEMO_RL} && \
 NRL_FORCE_REBUILD_VENVS=true UV_LOCK_TIMEOUT=3600 uv run examples/run_grpo.py \
-  --config ${RECIPE} \
+  --config ${CONTAINER_RECIPE} \
   cluster.num_nodes=${NUM_NODES} \
   cluster.gpus_per_node=${GPUS_PER_NODE} \
-  policy.model_name=${MODEL_DIR} \
-  policy.tokenizer.name=${MODEL_DIR} \
+  policy.model_name=${CONTAINER_MODEL_DIR} \
+  policy.tokenizer.name=${CONTAINER_MODEL_DIR} \
   policy.dtensor_cfg.expert_parallel_size=4 \
   policy.generation.vllm_cfg.tensor_parallel_size=4 \
   policy.generation.vllm_cfg.expert_parallel_size=4 \
-  checkpointing.checkpoint_dir=${RUN_DIR}/checkpoints \
-  logger.log_dir=${RUN_DIR}/logs"
+  checkpointing.checkpoint_dir=${CONTAINER_RUN_DIR}/checkpoints \
+  logger.log_dir=${CONTAINER_RUN_DIR}/logs"
 
 cd "${NEMO_RL}"
 sbatch \

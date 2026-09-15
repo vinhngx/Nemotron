@@ -6,9 +6,10 @@ defaults: /shared/code/RL/examples/configs/grpo_math_1B.yaml
 grpo:
   max_num_steps: 1
   max_num_epochs: 1
-  num_prompts_per_step: 1
-  # The colocated 16-GPU policy has 16 log-prob shards; keep the one-prompt
-  # reference batch divisible by that shard count.
+  # Match the native Super-VL DAPO rollout batch: 32 prompts x 16 generations
+  # = 512 samples per policy update. This divides evenly across 16 log-prob
+  # shards in the colocated four-node topology.
+  num_prompts_per_step: 32
   num_generations_per_prompt: 16
   max_val_samples: null
   val_at_start: false
@@ -29,11 +30,14 @@ policy:
   tokenizer:
     name: ${policy.model_name}
   hf_config_overrides: {num_nextn_predict_layers: 0}
-  train_global_batch_size: 16
+  # Match the 32 x 16 rollout batch used by the native Super-VL DAPO recipe.
+  train_global_batch_size: 512
   train_micro_batch_size: 1
   logprob_batch_size: 1
   logprob_chunk_size: 1024
-  max_total_sequence_length: 1536
+  # Reserve up to 2,048 tokens for a mathematical derivation while retaining
+  # room for the problem prompt.
+  max_total_sequence_length: 4096
   make_sequence_length_divisible_by: 8
   dynamic_batching: {enabled: true}
   sequence_packing: {enabled: false}
@@ -66,7 +70,10 @@ policy:
         enable_hf_state_dict_adapter: true
   generation:
     backend: vllm
-    max_new_tokens: 256
+    # A 2,048-token response budget supports multi-step math reasoning. The
+    # full native DAPO profile uses 8,192 tokens; this four-node Gym profile
+    # deliberately uses a smaller, practical budget.
+    max_new_tokens: 2048
     temperature: 1.0
     vllm_cfg:
       tensor_parallel_size: 4
@@ -102,17 +109,17 @@ data:
   shuffle: false
   num_workers: 0
   train:
-    # Created with the Ultra/Gym DAPO-17k preparation workflow:
-    # resources_servers/math_with_judge/prepare_dapo17k.py followed by
-    # `gym dataset collate --mode train_preparation`.
+    # Generated on the login/head node with the shared Ultra DAPO converter:
+    # prepare_hf_dapo_data_for_nemo_gym.py --limit 6400.
     data_path: /shared/code/Nemotron/usage-cookbook/Nemotron-3.5-Super-VL/RL/grpo-dapo-nemo-gym/dapo17k/train.jsonl
     dataset_name: NemoGymDataset
     env_name: nemo_gym
     prompt_file: null
     system_prompt_file: null
     processor: nemo_gym_data_processor
-  # The shared GRPO setup requires a validation dataset object even though this
-  # The initial one-step profile disables validation callbacks.
+  # Generated on the login/head node with the same converter using
+  # --skip 6400 --limit 256. The shared GRPO setup requires this dataset object
+  # even though the initial one-step profile disables validation callbacks.
   validation:
     data_path: /shared/code/Nemotron/usage-cookbook/Nemotron-3.5-Super-VL/RL/grpo-dapo-nemo-gym/dapo17k/validation.jsonl
     dataset_name: NemoGymDataset
