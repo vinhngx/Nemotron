@@ -1,11 +1,11 @@
 # NeMoGym DAPO-17k for Nemotron 3.5 Super VL
 
 This directory provides a **text-only** NeMoGym GRPO reference configuration
-for Nemotron 3.5 Super VL (`NemotronH_Omni_Reasoning_V3`) on
-NeMo RL's AutoModel (DTensor) backend. It uses the same DAPO-17k source and
-Ultra/NeMoGym preprocessing flow as the math workflow, sends rollouts through
-Gym's Responses API, and receives rewards from Gym's `math_with_judge`
-resource server.
+for Nemotron 3.5 Super VL (`NemotronH_Omni_Reasoning_V3`) on NeMo RL's
+AutoModel (DTensor) backend. It uses the same DAPO-Math-17K Hugging Face
+conversion procedure as the Nemotron 3 Ultra NeMoGym guide, sends rollouts
+through Gym's Responses API, and receives rewards from Gym's
+`math_with_judge` resource server.
 
 Use [`dapo_nemotron_3_5_super_vl_nemo_gym.yaml`](dapo_nemotron_3_5_super_vl_nemo_gym.yaml).
 Complete the shared setup in [`../README.md`](../README.md) first.
@@ -14,6 +14,49 @@ Complete the shared setup in [`../README.md`](../README.md) first.
 > This recipe is text-only. Do not attach images or enable image RL: the Super
 > VL AutoModel path does not yet support image RL, including through NeMoGym.
 
+## Training goal and data
+
+The goal is to improve mathematical reasoning by optimizing sampled responses
+for verifiable final-answer correctness, rather than by supervised imitation of
+a reference solution. The recipe converts 6,400 `DAPO-Math-17K` mathematics
+problems into Gym requests for training and reserves the next 256 examples for
+validation. Each converted record carries a problem and expected answer;
+Gym's `math_with_judge` service evaluates generated answers against that
+expected result.
+
+## Shared-storage layout
+
+Mount the host shared-storage directory at `/shared` inside the container. The
+host-to-container mapping and layout are:
+
+```text
+</YOUR/SHARED/STORAGE> (login/head node)  -->  /shared (training container)
+```
+
+The container-side tree is therefore:
+
+```text
+/shared
+|____code
+|    |____RL                    <- NeMo RL, branch super-3.5-automodel
+|    |____Nemotron              <- Cookbook repository
+|____models
+|    |____NVIDIA-Nemotron-3.5-Super-EA-09112026
+|____runs
+|____.cache/huggingface
+```
+
+From the login/head node, define the host-side paths used by this guide. Do not
+use `/shared` on the login node; it is the container mount point.
+
+```bash
+export SHARED_ROOT=$(realpath </YOUR/SHARED/STORAGE>)
+export NEMO_RL="${SHARED_ROOT}/code/RL"
+export NEMOTRON_REPO="${SHARED_ROOT}/code/Nemotron"
+export MODEL_DIR="${SHARED_ROOT}/models/NVIDIA-Nemotron-3.5-Super-EA-09112026"
+export HF_HOME="${SHARED_ROOT}/.cache/huggingface"
+```
+
 ## Configuration overview
 
 The reference configuration uses four nodes with four GPUs each. It starts four
@@ -21,9 +64,13 @@ TP=4/EP=4 Gym-backed vLLM groups, collects DAPO-17k rollouts through the
 Responses API, processes `math_with_judge` rewards, and trains the colocated
 16-GPU AutoModel policy.
 
-The included profile uses one prompt x 16 generations with `max_new_tokens:
-256`. Adjust sequence length, generation count, step count, validation,
-checkpointing, and observability for the target training program.
+The included profile matches the native Super-VL DAPO rollout batch: 32 prompts
+x 16 generations, or 512 samples per policy update, with `max_new_tokens:
+2048` and a 4,096-token total sequence limit. This allows multi-step math
+reasoning while remaining substantially smaller than the native DAPO profile's
+8,192-token response budget. The policy global batch is also 512. Adjust
+sequence length, generation count, step count, validation, checkpointing, and
+observability for the target training program.
 
 ## Model and topology requirements
 
@@ -40,8 +87,8 @@ as a group without revalidating the path:
 - Generation and training are colocated across all 16 GPUs. vLLM releases
   memory while FusedAdam initializes and trains; a two-node policy slice OOMs
   at the first update.
-- The initial global batch is 16 (one prompt x 16 generations), matching the 16
-  policy logprob shards.
+- The 512-sample rollout and policy batch (32 prompts x 16 generations) divides
+  evenly across the 16 policy logprob shards.
 
 Use the `super-3.5-automodel` NeMo RL branch and a compatible Super-VL image.
 After changing the branch, submodules, or image contents, set
@@ -50,32 +97,56 @@ checkpoint, and container setup.
 
 ## Prepare DAPO-17k for Gym
 
-The checked-in [`dapo17k/`](dapo17k/) output was produced from the upstream
-Ultra/NeMoGym preprocessing scripts, not from the direct GRPO JSONL. Regenerate
-it after changing either Gym's source data or its `dapo17k.yaml` configuration:
+This guide uses the same converter and deterministic split as the Nemotron 3
+Ultra NeMoGym guide: 6,400 training examples followed by 256 validation
+examples from
+[`BytedTsinghua-SIA/DAPO-Math-17k`](https://huggingface.co/datasets/BytedTsinghua-SIA/DAPO-Math-17k).
+The converter writes Gym rows with `responses_create_params`, `expected_answer`,
+and the `math_with_judge_simple_agent` reference required by this recipe.
+
+> [!IMPORTANT]
+> Run every command in this section on the **login/head node**, outside the
+> Slurm allocation and training container. Use only the host-side paths rooted
+> at `${SHARED_ROOT}`—the login node does **not** have a `/shared` path. The
+> training container sees that same host directory at `/shared`, as configured
+> later by `MOUNTS="${SHARED_ROOT}:/shared"`. Set `SHARED_ROOT`, `NEMO_RL`, and
+> `NEMOTRON_REPO` as described in the parent README before continuing.
 
 ```bash
-export NEMO_RL=/shared/code/RL
-export NEMOTRON_REPO=/shared/code/Nemotron
-export GYM_ROOT="${NEMO_RL}/3rdparty/Gym-workspace/Gym"
+# Host-side paths: do not substitute the container's /shared mount here.
 export COOKBOOK_DIR="${NEMOTRON_REPO}/usage-cookbook/Nemotron-3.5-Super-VL/RL/grpo-dapo-nemo-gym"
+export PREP_SCRIPT="${NEMOTRON_REPO}/usage-cookbook/Nemotron-3-Ultra/RL/grpo-dapo-nemo-gym/prepare_hf_dapo_data_for_nemo_gym.py"
+export HF_HOME="${HF_HOME:-${SHARED_ROOT}/.cache/huggingface}"
+export HF_DATASETS_CACHE="${HF_DATASETS_CACHE:-${HF_HOME}/datasets}"
+export HF_DATASET_ID=BytedTsinghua-SIA/DAPO-Math-17k
 
-cd "${GYM_ROOT}/resources_servers/math_with_judge"
-python prepare_dapo17k.py
-python prepare_aime24.py
+# Install once on the login/head node if `python -c 'import datasets'` fails.
+python -m pip install --upgrade --user datasets
 
-cd "${GYM_ROOT}"
-gym dataset collate \
-  --config resources_servers/math_with_judge/configs/dapo17k.yaml \
-  --output-dir "${COOKBOOK_DIR}/dapo17k" \
-  --mode train_preparation \
-  ++math_with_judge.resources_servers.math_with_judge.judge_model_server.name=policy_model
+mkdir -p "${HF_DATASETS_CACHE}" "${COOKBOOK_DIR}/dapo17k"
+
+python "${PREP_SCRIPT}" \
+  --dataset "${HF_DATASET_ID}" \
+  --split train \
+  --cache-dir "${HF_DATASETS_CACHE}" \
+  --output "${COOKBOOK_DIR}/dapo17k/train.jsonl" \
+  --limit 6400 \
+  --strict
+
+python "${PREP_SCRIPT}" \
+  --dataset "${HF_DATASET_ID}" \
+  --split train \
+  --cache-dir "${HF_DATASETS_CACHE}" \
+  --skip 6400 \
+  --output "${COOKBOOK_DIR}/dapo17k/validation.jsonl" \
+  --limit 256 \
+  --strict
 ```
 
-This creates the Gym-collated `dapo17k/train.jsonl` and the repeated AIME-2024
-`dapo17k/validation.jsonl` (17,398 and 960 rows, respectively, in the tested
-artifact). The recipe requires both files even though the initial profile
-disables validation callbacks.
+The resulting `dapo17k/train.jsonl` and `dapo17k/validation.jsonl` contain
+6,400 and 256 rows, respectively. The recipe requires both files even though
+the initial profile disables validation callbacks. Do not commit these generated
+data files to the cookbook repository.
 
 ## Four-node interactive reference run
 
@@ -134,7 +205,7 @@ uv run examples/nemo_gym/run_grpo_nemo_gym.py \
   logger.log_dir="${RUN_DIR}/training"
 ```
 
-The driver should reach `Epoch 1/1`, collect `16/16` rollouts, then print
+The driver should reach `Epoch 1/1`, collect `512/512` rollouts, then print
 `Processing rewards`, `Computing logprobs`, `Training policy`, and the normal
 one-step completion message. Gym service logs are under `${RUN_DIR}/nemo_gym`;
 the runner creates a numbered subdirectory under `${RUN_DIR}/training`.
@@ -142,6 +213,75 @@ the runner creates a numbered subdirectory under `${RUN_DIR}/training`.
 If a failed attempt leaves Gym child services alive, inspect and stop only
 processes from that job via `<jobid>-attach.sh` (use indexed helpers for worker
 nodes). Release the allocation with `scancel <jobid>` when finished.
+
+## Four-node batch run
+
+For an unattended run, submit the driver as `COMMAND` from the **login/head
+node**. Host paths are used before submission; the command itself runs in the
+container and therefore uses `/shared` paths. Choose a new `RUN_NAME` for each
+attempt so that logs and checkpoints are not mixed. A checkpoint can require
+roughly 1.8 TB of shared storage.
+
+```bash
+# Run on the login/head node, not inside the training container.
+export NUM_NODES=4
+export GPUS_PER_NODE=4
+export NUM_STEPS=<NUM_TRAINING_STEPS>
+export RUN_NAME=nemotron-3.5-super-vl-nemo-gym-$(date +%Y%m%d-%H%M%S)
+export HOST_RUN_DIR="${SHARED_ROOT}/runs/${RUN_NAME}"
+mkdir -p "${HOST_RUN_DIR}/logs" "${HOST_RUN_DIR}/checkpoints"
+
+export SLURM_ACCOUNT=<SLURM_ACCOUNT>
+export PARTITION=<SLURM_PARTITION>
+export CONTAINER=<SITE_ACCESSIBLE_SUPER_VL_NEMO_RL_IMAGE>
+export MOUNTS="${SHARED_ROOT}:/shared"
+export BASE_LOG_DIR="${HOST_RUN_DIR}/slurm"
+export NRL_FORCE_REBUILD_VENVS=true
+export UV_LOCK_TIMEOUT=3600
+
+# Optional: load WANDB_API_KEY from a login-node-only environment file.
+# Do not place credentials in this guide, the recipe, or COMMAND.
+if [ -f "${SHARED_ROOT}/.env" ]; then set -a && source "${SHARED_ROOT}/.env" && set +a; fi
+
+export CONTAINER_NEMO_RL=/shared/code/RL
+export CONTAINER_RECIPE=/shared/code/Nemotron/usage-cookbook/Nemotron-3.5-Super-VL/RL/grpo-dapo-nemo-gym/dapo_nemotron_3_5_super_vl_nemo_gym.yaml
+export CONTAINER_MODEL_DIR=/shared/models/NVIDIA-Nemotron-3.5-Super-EA-09112026
+export CONTAINER_RUN_DIR="/shared/runs/${RUN_NAME}"
+
+export COMMAND="cd ${CONTAINER_NEMO_RL} && \
+NRL_FORCE_REBUILD_VENVS=true UV_LOCK_TIMEOUT=3600 \
+uv run examples/nemo_gym/run_grpo_nemo_gym.py \
+  --config ${CONTAINER_RECIPE} \
+  cluster.num_nodes=${NUM_NODES} \
+  cluster.gpus_per_node=${GPUS_PER_NODE} \
+  policy.model_name=${CONTAINER_MODEL_DIR} \
+  policy.tokenizer.name=${CONTAINER_MODEL_DIR} \
+  grpo.max_num_steps=${NUM_STEPS} \
+  checkpointing.enabled=true \
+  checkpointing.checkpoint_dir=${CONTAINER_RUN_DIR}/checkpoints \
+  env.nemo_gym.nemo_gym_log_dir=${CONTAINER_RUN_DIR}/nemo_gym \
+  logger.log_dir=${CONTAINER_RUN_DIR}/logs \
+  logger.wandb_enabled=true \
+  logger.tensorboard_enabled=true \
+  logger.wandb.project=nemo-rl-super-3.5 \
+  logger.wandb.name=${RUN_NAME}"
+
+cd "${NEMO_RL}"
+sbatch \
+  --nodes="${NUM_NODES}" \
+  --account="${SLURM_ACCOUNT}" \
+  --partition="${PARTITION}" \
+  --job-name="${RUN_NAME}" \
+  --time=04:00:00 \
+  --gres=gpu:"${GPUS_PER_NODE}" \
+  --exclusive \
+  ray.sub
+```
+
+Monitor the submitted job from the login/head node with `squeue -j <jobid>` and
+inspect `${HOST_RUN_DIR}/slurm`, `${HOST_RUN_DIR}/logs`, and
+`${HOST_RUN_DIR}/nemo_gym` as the job progresses. Cancel it with
+`scancel <jobid>` if needed.
 
 ## Scope and next steps
 
