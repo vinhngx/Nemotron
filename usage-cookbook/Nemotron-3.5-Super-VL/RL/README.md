@@ -162,9 +162,9 @@ The checkpoint contains remote model code and 63 BF16 safetensors shards
 ## What to run next
 
 Follow [the direct DAPO/GRPO guide](grpo-dapo/grpo_training_cookbook.md) for
-the native reward path and the 16-node production topology. Follow [the
-NeMoGym DAPO-17k guide](grpo-dapo-nemo-gym/README.md) when the rollout must go
-through the Gym Responses API and `math_with_judge` verifier.
+the native reward path. Follow [the NeMoGym DAPO-17k
+guide](grpo-dapo-nemo-gym/grpo_training_cookbook_nemo_gym.md) when the rollout
+uses the Gym Responses API and `math_with_judge` verifier.
 
 ## Status of the NeMoGym workflow
 

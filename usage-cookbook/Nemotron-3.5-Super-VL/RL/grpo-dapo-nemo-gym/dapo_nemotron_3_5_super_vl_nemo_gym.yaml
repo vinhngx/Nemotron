@@ -137,7 +137,7 @@ env:
   should_use_nemo_gym: true
   should_log_nemo_gym_responses: true
   nemo_gym:
-    nemo_gym_log_dir: /shared/code/RL/session/20260914_181500/logs/gym-attempt5/nemo_gym
+    nemo_gym_log_dir: /shared/runs/nemotron-3.5-super-vl-nemo-gym/nemo_gym
     skip_venv_if_present: true
     port_range_low: 5000
     port_range_high: 5999
@@ -157,7 +157,7 @@ env:
         vllm_model: {num_workers: 4, num_groups_nemo_rl: 4}
 
 logger:
-  log_dir: /shared/code/RL/session/20260914_181500/logs/gym-attempt5/training
+  log_dir: /shared/runs/nemotron-3.5-super-vl-nemo-gym/logs
   wandb_enabled: false
   tensorboard_enabled: false
   monitor_gpus: true

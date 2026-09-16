@@ -184,7 +184,7 @@ checkpoint destination has multiple terabytes of available capacity.
 # Run on the login/head node, not inside the training container.
 export NUM_NODES=4
 export GPUS_PER_NODE=4
-export RUN_NAME=nemotron-3.5-super-vl-dapo-16n4g
+export RUN_NAME=nemotron-3.5-super-vl-dapo-4n4g
 export HOST_RUN_DIR="${SHARED_ROOT}/runs/${RUN_NAME}"
 mkdir -p "${HOST_RUN_DIR}/logs" "${HOST_RUN_DIR}/checkpoints"
 
