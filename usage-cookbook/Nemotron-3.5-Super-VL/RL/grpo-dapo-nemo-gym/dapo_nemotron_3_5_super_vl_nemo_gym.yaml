@@ -25,6 +25,8 @@ grpo:
 loss_fn: {reference_policy_kl_penalty: 0.0}
 checkpointing:
   enabled: false
+  # Validation is disabled in the default profile, so no ranked metric exists.
+  metric_name: null
   # Reserve time for a complete save before the documented four-hour limit.
   checkpoint_must_save_by: 00:03:20:00
   # A complete Super-VL checkpoint is about 1.8 TB; retain one by default.

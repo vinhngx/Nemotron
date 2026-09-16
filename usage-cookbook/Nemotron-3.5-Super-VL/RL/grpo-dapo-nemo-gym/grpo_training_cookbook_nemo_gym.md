@@ -219,7 +219,7 @@ If a failed attempt leaves Gym child services alive, inspect only the affected
 job through its attach helper, then terminate only the matching PIDs:
 
 ```bash
-COMMAND="ps -eo pid,args | rg 'nemo_gym|vllm'" bash ./<jobid>-attach.sh
+COMMAND="pgrep -af 'nemo_gym|vllm'" bash ./<jobid>-attach.sh
 COMMAND="kill <pid> [<pid> ...]" bash ./<jobid>-attach.sh
 ```
 

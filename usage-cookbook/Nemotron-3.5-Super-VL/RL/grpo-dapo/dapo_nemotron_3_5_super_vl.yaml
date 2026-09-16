@@ -36,7 +36,8 @@ checkpointing:
   # Leave enough margin for an approximately 1.8 TB checkpoint before a
   # four-hour Slurm allocation expires.
   checkpoint_must_save_by: 00:03:20:00
-  keep_top_k: 2
+  # A complete Super-VL checkpoint is about 1.8 TB; retain one by default.
+  keep_top_k: 1
 
 policy:
   # Override model_name and tokenizer.name together for a local checkpoint.
