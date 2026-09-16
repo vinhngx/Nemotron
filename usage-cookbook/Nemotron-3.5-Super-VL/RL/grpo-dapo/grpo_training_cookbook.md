@@ -103,12 +103,13 @@ mkdir -p "${RUN_DIR}"
 The default recipe creates checkpoints. Each checkpoint is about 1.8 TB. Set a
 run-specific `checkpointing.checkpoint_dir` after confirming capacity.
 
-## Four-node interactive reference run
+## Four-node interactive run
 
-This reference run executes one GRPO optimizer step on four 4-GPU nodes. It
-preserves the Super VL sequence length, batch, DAPO reward path, and dynamic
-sampling settings. Generation can take tens of minutes. Configure validation,
-checkpoints, and external logging for longer campaigns.
+Use this interactive run as the recommended clean-pipeline check before a
+production batch run. It provides a convenient environment for debugging the
+distributed setup, generation, rewards, log-probability calculation, and policy
+refit before committing to a longer campaign. The run executes one GRPO
+optimizer step on four 4-GPU nodes. Generation can take tens of minutes.
 
 Run from the login/head node:
 

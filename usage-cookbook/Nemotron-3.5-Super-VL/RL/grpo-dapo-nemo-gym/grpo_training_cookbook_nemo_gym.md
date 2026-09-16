@@ -152,6 +152,11 @@ data files to the cookbook repository.
 
 ## Four-node interactive reference run
 
+Use this interactive run as the recommended clean-pipeline check before a
+production batch run. It provides a convenient environment for debugging the
+distributed setup, Gym services, generation, rewards, log-probability
+calculation, and policy refit before committing to a longer campaign.
+
 Request four exclusive four-GPU nodes from the login node. `ray.sub` emits an
 attach helper when the allocation starts; use that helper to enter the job,
 not a direct `srun` attach.
