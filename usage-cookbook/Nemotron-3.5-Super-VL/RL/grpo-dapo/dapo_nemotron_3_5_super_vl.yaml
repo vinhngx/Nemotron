@@ -1,8 +1,9 @@
 # Nemotron 3.5 Super VL (120B-A12B) DAPO/GRPO recipe on AutoModel (DTensor).
 #
-# Default topology: 16 nodes x 8 GPUs, with intranode EP=8 and colocated vLLM
-# TP/EP=8. On 4-GPU nodes, override gpus_per_node, DTensor EP, and vLLM TP/EP
-# together to 4. This is a text-only recipe: do not provide images.
+# Default topology: four nodes x four GPUs, with intranode EP=4 and colocated
+# vLLM TP/EP=4. Keep gpus_per_node, DTensor EP, and vLLM TP/EP aligned when
+# adapting this recipe to a different node GPU count. This is a text-only
+# recipe: do not provide images.
 defaults: /shared/code/RL/examples/configs/grpo_math_1B.yaml
 
 grpo:
@@ -75,7 +76,7 @@ policy:
   - milestones:
     - 10
   dtensor_cfg:
-    expert_parallel_size: 8
+    expert_parallel_size: 4
     activation_checkpointing: true
     moe_parallelizer:
       # Required with activation checkpointing for the BF16 MoE router.
@@ -102,8 +103,8 @@ policy:
   generation:
     max_new_tokens: 8192
     vllm_cfg:
-      tensor_parallel_size: 8
-      expert_parallel_size: 8
+      tensor_parallel_size: 4
+      expert_parallel_size: 4
       gpu_memory_utilization: 0.5
       enforce_eager: true
       # Required for this architecture even for text-only prompts.
@@ -139,9 +140,9 @@ logger:
   monitor_gpus: true
   wandb:
     project: nemo-rl-super-3.5
-    name: dapo-nemotron3.5-super-vl-120BA12B-16n8g-automodel
+    name: dapo-nemotron3.5-super-vl-120BA12B-4n4g-automodel
     log_nemo_gym_full_result_tables: false
 
 cluster:
-  gpus_per_node: 8
-  num_nodes: 16
+  gpus_per_node: 4
+  num_nodes: 4

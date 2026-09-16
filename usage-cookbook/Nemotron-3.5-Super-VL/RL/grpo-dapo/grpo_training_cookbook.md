@@ -58,11 +58,12 @@ export HF_HOME="${SHARED_ROOT}/.cache/huggingface"
 
 ## Topology
 
-The cookbook configuration defaults to 16 nodes x 8 GPUs, with training EP=8
-and vLLM TP/EP=8. For 4-GPU nodes, override all four topology settings
-together:
+The cookbook configuration defaults to four nodes x four GPUs (16 GPUs total),
+with training EP=4 and vLLM TP/EP=4. This matches the interactive and batch
+examples below. Keep the topology settings aligned when adapting the recipe:
 
 ```text
+cluster.num_nodes=4
 cluster.gpus_per_node=4
 policy.dtensor_cfg.expert_parallel_size=4
 policy.generation.vllm_cfg.tensor_parallel_size=4
@@ -74,9 +75,9 @@ DeepEP group must stay within one node, so training EP must not exceed GPUs per
 node.
 
 Four 4-GPU GB200 nodes are the practical minimum for the reference
-configuration. Use 16 4-GPU nodes for the 4-GPU-node production layout; a
-single node can initialize parts of the runtime but will OOM at the first
-refit.
+configuration. To scale to additional 4-GPU nodes, retain EP/TP=4 and increase
+only `cluster.num_nodes`; a single node can initialize parts of the runtime but
+will OOM at the first refit.
 
 ## Local checkpoint and outputs
 
