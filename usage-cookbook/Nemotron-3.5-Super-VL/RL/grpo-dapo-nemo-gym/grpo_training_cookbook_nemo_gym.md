@@ -76,8 +76,7 @@ checkpointing, and observability for the target training program.
 
 ## Model and topology requirements
 
-The checked-in recipe encodes required Super VL settings. Do not change these
-as a group without revalidating the path:
+The checked-in recipe encodes the currently-supported Super VL training settings.
 
 - `policy.is_vlm: false` keeps this DAPO math workflow text-only.
 - `policy.hf_config_overrides.num_nextn_predict_layers: 0` removes the MTP
@@ -294,6 +293,4 @@ inspect `${HOST_RUN_DIR}/slurm`, `${HOST_RUN_DIR}/logs`, and
 
 For a sustained training campaign, choose a run-specific checkpoint directory,
 enable validation, checkpointing, and external observability, and provision
-roughly 1.8 TB per checkpoint. Keep the required Super-VL topology. For the
-native DAPO reward path and the 16-node layout, see
-[`../grpo-dapo/grpo_training_cookbook.md`](../grpo-dapo/grpo_training_cookbook.md).
+roughly 1.8 TB per checkpoint.

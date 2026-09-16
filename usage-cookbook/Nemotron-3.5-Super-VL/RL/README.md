@@ -165,11 +165,3 @@ Follow [the direct DAPO/GRPO guide](grpo-dapo/grpo_training_cookbook.md) for
 the native reward path. Follow [the NeMoGym DAPO-17k
 guide](grpo-dapo-nemo-gym/grpo_training_cookbook_nemo_gym.md) when the rollout
 uses the Gym Responses API and `math_with_judge` verifier.
-
-## Status of the NeMoGym workflow
-
-The NeMoGym cookbook has been ported and validated for one text-only Super VL
-step on four nodes x four GPUs. It starts four TP=4/EP=4 vLLM model groups,
-collects DAPO-17k Gym rollouts, routes rewards through `math_with_judge`, and
-performs the colocated AutoModel optimizer update. Image RL remains unsupported
-on the AutoModel path, including through NeMoGym.
