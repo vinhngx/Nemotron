@@ -70,9 +70,8 @@ policy:
         enable_hf_state_dict_adapter: true
   generation:
     backend: vllm
-    # A 2,048-token response budget supports multi-step math reasoning. The
-    # full native DAPO profile uses 8,192 tokens; this four-node Gym profile
-    # deliberately uses a smaller, practical budget.
+    # A 2,048-token response budget supports multi-step math reasoning and is
+    # a practical starting point for this four-node profile.
     max_new_tokens: 2048
     temperature: 1.0
     vllm_cfg:

@@ -69,11 +69,10 @@ together to fit available memory.
 
 The included profile matches the native Super-VL DAPO rollout batch: 32 prompts
 x 16 generations, or 512 samples per policy update, with `max_new_tokens:
-2048` and a 4,096-token total sequence limit. This allows multi-step math
-reasoning while remaining substantially smaller than the native DAPO profile's
-8,192-token response budget. The policy global batch is also 512. Adjust
-sequence length, generation count, step count, validation, checkpointing, and
-observability for the target training program.
+2048` and a 4,096-token total sequence limit. This supports multi-step math
+reasoning as a practical starting point. The policy global batch is also 512.
+Adjust sequence length, generation count, step count, validation,
+checkpointing, and observability for the target training program.
 
 ## Model and topology requirements
 

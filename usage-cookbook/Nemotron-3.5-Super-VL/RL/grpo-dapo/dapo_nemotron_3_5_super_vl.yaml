@@ -52,7 +52,9 @@ policy:
   train_micro_batch_size: 1
   logprob_batch_size: 1
   logprob_chunk_size: 2048
-  max_total_sequence_length: 9216
+  # Reserve up to 2,048 tokens for a mathematical derivation while retaining
+  # room for the problem prompt.
+  max_total_sequence_length: 4096
   make_sequence_length_divisible_by: 8
   optimizer:
     name: transformer_engine.pytorch.optimizers.fused_adam.FusedAdam
@@ -101,7 +103,9 @@ policy:
   dynamic_batching:
     enabled: true
   generation:
-    max_new_tokens: 8192
+    # A 2,048-token response budget is a practical starting point for
+    # multi-step math reasoning. Increase it only after reassessing memory.
+    max_new_tokens: 2048
     vllm_cfg:
       tensor_parallel_size: 4
       expert_parallel_size: 4

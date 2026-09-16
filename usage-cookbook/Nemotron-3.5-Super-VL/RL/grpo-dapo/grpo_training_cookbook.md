@@ -82,6 +82,11 @@ additional 4-GPU nodes, retain EP/TP=4 and increase only
 `cluster.num_nodes`; a single node can initialize parts of the runtime but will
 OOM at the first refit.
 
+The default profile uses a 2,048-token generation budget and a 4,096-token
+total sequence limit. This supports multi-step mathematical reasoning as a
+practical starting point; increase the limits only after reassessing memory
+capacity and task quality.
+
 ## Local checkpoint and outputs
 
 The configuration defaults to the gated Hugging Face checkpoint. For a local
@@ -168,15 +173,15 @@ calculation, and `Training policy`, then print `Max number of steps has been
 reached`. This provides a fast confirmation of the complete distributed
 training path before launching a longer campaign.
 
-## Full 4-GPU-node run
+## Four-node batch run
 
-For the intended 16-node x 4-GPU layout, submit the same recipe through
+For batch run mode, submit the same recipe through
 `ray.sub`. Checkpoints, validation, and W&B are enabled below; make sure the
 checkpoint destination has multiple terabytes of available capacity.
 
 ```bash
 # Run on the login/head node, not inside the training container.
-export NUM_NODES=16
+export NUM_NODES=4
 export GPUS_PER_NODE=4
 export RUN_NAME=nemotron-3.5-super-vl-dapo-16n4g
 export HOST_RUN_DIR="${SHARED_ROOT}/runs/${RUN_NAME}"
