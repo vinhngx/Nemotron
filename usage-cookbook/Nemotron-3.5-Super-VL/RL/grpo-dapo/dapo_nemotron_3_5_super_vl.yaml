@@ -1,9 +1,9 @@
 # Nemotron 3.5 Super VL (120B-A12B) DAPO/GRPO recipe on AutoModel (DTensor).
 #
-# Default topology: four nodes x four GPUs, with intranode EP=4 and colocated
-# vLLM TP/EP=4. Keep gpus_per_node, DTensor EP, and vLLM TP/EP aligned when
-# adapting this recipe to a different node GPU count. This is a text-only
-# recipe: do not provide images.
+# Validated GB200 test topology: four nodes x four GPUs, with intranode EP=4
+# and colocated vLLM TP/EP=4. Keep gpus_per_node, DTensor EP, and vLLM TP/EP
+# aligned when adapting this recipe to different hardware or memory capacity.
+# This is a text-only recipe: do not provide images.
 defaults: /shared/code/RL/examples/configs/grpo_math_1B.yaml
 
 grpo:

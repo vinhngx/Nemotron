@@ -58,9 +58,10 @@ export HF_HOME="${SHARED_ROOT}/.cache/huggingface"
 
 ## Topology
 
-The cookbook configuration defaults to four nodes x four GPUs (16 GPUs total),
-with training EP=4 and vLLM TP/EP=4. This matches the interactive and batch
-examples below. Keep the topology settings aligned when adapting the recipe:
+The cookbook configuration defaults to the validated GB200 test configuration:
+four nodes x four GPUs (16 GPUs total), with training EP=4 and vLLM TP/EP=4.
+This matches the interactive and batch examples below. Keep the topology
+settings aligned when adapting the recipe:
 
 ```text
 cluster.num_nodes=4
@@ -74,10 +75,12 @@ Also keep `cluster.num_nodes` equal to the nodes requested from Slurm. The
 DeepEP group must stay within one node, so training EP must not exceed GPUs per
 node.
 
-Four 4-GPU GB200 nodes are the practical minimum for the reference
-configuration. To scale to additional 4-GPU nodes, retain EP/TP=4 and increase
-only `cluster.num_nodes`; a single node can initialize parts of the runtime but
-will OOM at the first refit.
+This is a validated GB200 configuration, not a universal hardware requirement.
+For other GPU models or memory capacities, adjust the node count, GPUs per node,
+and parallelism settings together to fit available memory. When scaling to
+additional 4-GPU nodes, retain EP/TP=4 and increase only
+`cluster.num_nodes`; a single node can initialize parts of the runtime but will
+OOM at the first refit.
 
 ## Local checkpoint and outputs
 
