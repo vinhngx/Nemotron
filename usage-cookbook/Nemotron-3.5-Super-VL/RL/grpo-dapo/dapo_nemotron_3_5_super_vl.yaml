@@ -131,6 +131,7 @@ policy:
       mm_processor_cache_gb: 0
 
 data:
+  # Prompts longer than this are truncated before generation.
   max_input_seq_length: 2048
   train:
     dataset_name: DAPOMath17K

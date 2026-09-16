@@ -6,12 +6,11 @@ backend. The supported workflow is **text-only** DAPO/GRPO with colocated vLLM
 generation. Although the checkpoint includes a RADIO vision tower, image RL is
 not supported on this backend yet.
 
-Both cookbook paths provide a validated starting point for distributed Super VL
-RL on the four-node GB200 topology. The NeMoGym path is text-only and uses
-Gym-prepared DAPO-17k with the `math_with_judge` resource server. The reference
-configuration has completed a real optimizer update end to end; scale-out,
-checkpoint/resume, and learning-curve evaluation should be enabled according to
-the operational requirements of the target deployment.
+Both cookbook paths have completed one text-only optimizer update on the
+four-node GB200 reference topology. They are starting points, not convergence
+or quality validation; establish task-specific metrics before scaling a
+campaign. The NeMoGym path uses Gym-prepared DAPO-17k with the
+`math_with_judge` resource server.
 
 - `grpo-dapo/`: supported text-only DAPO/GRPO recipe and Slurm workflow.
 - `grpo-dapo-nemo-gym/`: validated text-only NeMoGym DAPO-17k reference
@@ -52,6 +51,8 @@ layout:
 |    |____Nemotron              <- Cookbook repository
 |____models
 |    |____NVIDIA-Nemotron-3.5-Super-EA-09112026
+|____data
+|    |____dapo17k
 |____runs
 |____.cache/huggingface
 ```
@@ -133,10 +134,11 @@ regenerate `/opt/nemo_rl_container_fingerprint` with
 ## Obtain the checkpoint
 
 The recipe defaults to the gated Hugging Face checkpoint
-`nvidia/nemotron-3.5-super-pre-ea-text-08282026`. For a local checkpoint,
-override both `policy.model_name` and `policy.tokenizer.name` together. The
-tested local EA checkpoint is shown in the layout above. If downloading the
-recipe default, use a directory named for that artifact instead:
+`nvidia/nemotron-3.5-super-pre-ea-text-08282026`. The worked commands use the
+local EA checkpoint shown in the storage layout; it is the checkpoint used for
+the reference run. These are distinct artifacts: use one model directory and
+the matching tokenizer consistently, rather than mixing their paths. If using
+the recipe default, download it into a directory named for that artifact:
 
 ```bash
 export HUB_MODEL_DIR="${SHARED_ROOT}/models/nemotron-3.5-super-pre-ea-text-08282026"
@@ -158,6 +160,16 @@ The checkpoint contains remote model code and 63 BF16 safetensors shards
 - Generation dominates step time. Begin with the included four-node reference
   configuration, then set run-specific step counts, checkpointing, validation,
   and observability for the target training program.
+
+## Troubleshooting
+
+| Symptom | Check and action |
+| --- | --- |
+| vLLM fails during initialization | Keep `max_num_batched_tokens: 4096`; Super-VL's Mamba cache requires more than the inherited 2,048-token limit. |
+| OOM during policy refit | Use the colocated 4 nodes x 4 GPUs topology with EP/TP=4. Do not reduce the policy to two nodes. |
+| Refit IPC failure | Remove `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` and restart the job. |
+| Environment setup stalls | Keep `NRL_FORCE_REBUILD_VENVS=true` after branch or image changes and use `UV_LOCK_TIMEOUT=3600`. |
+| Gym services persist after a failure | Use the job's `<jobid>-attach.sh` helper to inspect matching processes, then `scancel <jobid>` when the allocation is no longer needed. |
 
 ## What to run next
 

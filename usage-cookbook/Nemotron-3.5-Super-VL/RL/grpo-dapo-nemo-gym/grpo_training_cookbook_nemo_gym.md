@@ -42,6 +42,8 @@ The container-side tree is therefore:
 |    |____Nemotron              <- Cookbook repository
 |____models
 |    |____NVIDIA-Nemotron-3.5-Super-EA-09112026
+|____data
+|    |____dapo17k
 |____runs
 |____.cache/huggingface
 ```
@@ -123,7 +125,7 @@ export HF_DATASET_ID=BytedTsinghua-SIA/DAPO-Math-17k
 
 mkdir -p "${HF_DATASETS_CACHE}" "${DATA_DIR}"
 
-uv run --with datasets python "${PREP_SCRIPT}" \
+uv run --no-project --with datasets python "${PREP_SCRIPT}" \
   --dataset "${HF_DATASET_ID}" \
   --split train \
   --cache-dir "${HF_DATASETS_CACHE}" \
@@ -131,7 +133,7 @@ uv run --with datasets python "${PREP_SCRIPT}" \
   --limit 6400 \
   --strict
 
-uv run --with datasets python "${PREP_SCRIPT}" \
+uv run --no-project --with datasets python "${PREP_SCRIPT}" \
   --dataset "${HF_DATASET_ID}" \
   --split train \
   --cache-dir "${HF_DATASETS_CACHE}" \
@@ -213,9 +215,16 @@ The driver should reach `Epoch 1/1`, collect `512/512` rollouts, then print
 one-step completion message. Gym service logs are under `${RUN_DIR}/nemo_gym`;
 the runner creates a numbered subdirectory under `${RUN_DIR}/training`.
 
-If a failed attempt leaves Gym child services alive, inspect and stop only
-processes from that job via `<jobid>-attach.sh` (use indexed helpers for worker
-nodes). Release the allocation with `scancel <jobid>` when finished.
+If a failed attempt leaves Gym child services alive, inspect only the affected
+job through its attach helper, then terminate only the matching PIDs:
+
+```bash
+COMMAND="ps -eo pid,args | rg 'nemo_gym|vllm'" bash ./<jobid>-attach.sh
+COMMAND="kill <pid> [<pid> ...]" bash ./<jobid>-attach.sh
+```
+
+Use indexed attach helpers for worker nodes. Release the allocation with
+`scancel <jobid>` when finished.
 
 ## Four-node batch run
 
@@ -230,6 +239,7 @@ roughly 1.8 TB of shared storage.
 export NUM_NODES=4
 export GPUS_PER_NODE=4
 export NUM_STEPS=<NUM_TRAINING_STEPS>
+export VAL_PERIOD=0  # Set a positive cadence for periodic validation.
 export RUN_NAME=nemotron-3.5-super-vl-nemo-gym-$(date +%Y%m%d-%H%M%S)
 export HOST_RUN_DIR="${SHARED_ROOT}/runs/${RUN_NAME}"
 mkdir -p "${HOST_RUN_DIR}/logs" "${HOST_RUN_DIR}/checkpoints"
@@ -260,6 +270,7 @@ uv run examples/nemo_gym/run_grpo_nemo_gym.py \
   policy.model_name=${CONTAINER_MODEL_DIR} \
   policy.tokenizer.name=${CONTAINER_MODEL_DIR} \
   grpo.max_num_steps=${NUM_STEPS} \
+  grpo.val_period=${VAL_PERIOD} \
   checkpointing.enabled=true \
   checkpointing.checkpoint_dir=${CONTAINER_RUN_DIR}/checkpoints \
   env.nemo_gym.nemo_gym_log_dir=${CONTAINER_RUN_DIR}/nemo_gym \
@@ -289,5 +300,5 @@ inspect `${HOST_RUN_DIR}/slurm`, `${HOST_RUN_DIR}/logs`, and
 ## Scope and next steps
 
 For a sustained training campaign, choose a run-specific checkpoint directory,
-enable validation, checkpointing, and external observability, and provision
-roughly 1.8 TB per checkpoint.
+set `VAL_PERIOD` to a positive cadence if periodic validation is required, and
+provision roughly 1.8 TB for the retained checkpoint.

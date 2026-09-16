@@ -12,6 +12,9 @@ grpo:
   num_prompts_per_step: 32
   num_generations_per_prompt: 16
   max_val_samples: null
+  # The one-step profile and default batch workflow disable periodic validation.
+  # Set a positive value for a sustained campaign.
+  val_period: 0
   val_at_start: false
   val_at_end: false
   use_dynamic_sampling: false
@@ -20,7 +23,12 @@ grpo:
   reward_shaping: {enabled: false}
 
 loss_fn: {reference_policy_kl_penalty: 0.0}
-checkpointing: {enabled: false}
+checkpointing:
+  enabled: false
+  # Reserve time for a complete save before the documented four-hour limit.
+  checkpoint_must_save_by: 00:03:20:00
+  # A complete Super-VL checkpoint is about 1.8 TB; retain one by default.
+  keep_top_k: 1
 
 policy:
   model_name: nvidia/nemotron-3.5-super-pre-ea-text-08282026

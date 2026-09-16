@@ -41,6 +41,8 @@ The container-side tree is therefore:
 |    |____Nemotron              <- Cookbook repository
 |____models
 |    |____NVIDIA-Nemotron-3.5-Super-EA-09112026
+|____data
+|    |____dapo17k
 |____runs
 |____.cache/huggingface
 ```
@@ -109,7 +111,6 @@ Run from the login/head node:
 ```bash
 export NUM_NODES=4
 export GPUS_PER_NODE=4
-export NUM_STEPS=<NUM_TRAINING_STEPS>
 export SLURM_ACCOUNT=<SLURM_ACCOUNT>
 export PARTITION=<SLURM_PARTITION>
 export CONTAINER=<SITE_ACCESSIBLE_SUPER_VL_NEMO_RL_IMAGE>
@@ -178,6 +179,7 @@ checkpoint destination has multiple terabytes of available capacity.
 # Run on the login/head node, not inside the training container.
 export NUM_NODES=4
 export GPUS_PER_NODE=4
+export NUM_STEPS=<NUM_TRAINING_STEPS>
 export RUN_NAME=nemotron-3.5-super-vl-dapo-4n4g
 export HOST_RUN_DIR="${SHARED_ROOT}/runs/${RUN_NAME}"
 mkdir -p "${HOST_RUN_DIR}/logs" "${HOST_RUN_DIR}/checkpoints"
