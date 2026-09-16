@@ -59,10 +59,13 @@ export HF_HOME="${SHARED_ROOT}/.cache/huggingface"
 
 ## Configuration overview
 
-The reference configuration uses four nodes with four GPUs each. It starts four
-TP=4/EP=4 Gym-backed vLLM groups, collects DAPO-17k rollouts through the
-Responses API, processes `math_with_judge` rewards, and trains the colocated
-16-GPU AutoModel policy.
+The validated GB200 test configuration uses four nodes with four GPUs each. It
+starts four TP=4/EP=4 Gym-backed vLLM groups, collects DAPO-17k rollouts
+through the Responses API, processes `math_with_judge` rewards, and trains the
+colocated 16-GPU AutoModel policy. This is a validated reference configuration,
+not a universal hardware requirement: for other GPU models or memory
+capacities, adjust the node count, GPUs per node, and parallelism settings
+together to fit available memory.
 
 The included profile matches the native Super-VL DAPO rollout batch: 32 prompts
 x 16 generations, or 512 samples per policy update, with `max_new_tokens:
