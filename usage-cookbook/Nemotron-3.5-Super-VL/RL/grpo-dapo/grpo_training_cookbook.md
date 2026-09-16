@@ -87,18 +87,11 @@ total sequence limit. This supports multi-step mathematical reasoning as a
 practical starting point; increase the limits only after reassessing memory
 capacity and task quality.
 
-## Local checkpoint and outputs
+## Checkpoints and outputs
 
 The configuration defaults to the gated Hugging Face checkpoint. For a local
-checkpoint, override both model and tokenizer paths. The examples below use
-the variables defined in the parent README:
-
-```bash
-export RECIPE="${NEMOTRON_REPO}/usage-cookbook/Nemotron-3.5-Super-VL/RL/grpo-dapo/dapo_nemotron_3_5_super_vl.yaml"
-export RUN_NAME=nemotron-3.5-super-vl-dapo
-export RUN_DIR="${SHARED_ROOT}/runs/${RUN_NAME}"
-mkdir -p "${RUN_DIR}"
-```
+checkpoint, override both model and tokenizer paths. The interactive and batch
+sections define their own recipe and run-output paths.
 
 The default recipe creates checkpoints. Each checkpoint is about 1.8 TB. Set a
 run-specific `checkpointing.checkpoint_dir` after confirming capacity.
@@ -116,6 +109,7 @@ Run from the login/head node:
 ```bash
 export NUM_NODES=4
 export GPUS_PER_NODE=4
+export NUM_STEPS=<NUM_TRAINING_STEPS>
 export SLURM_ACCOUNT=<SLURM_ACCOUNT>
 export PARTITION=<SLURM_PARTITION>
 export CONTAINER=<SITE_ACCESSIBLE_SUPER_VL_NEMO_RL_IMAGE>
@@ -215,8 +209,14 @@ NRL_FORCE_REBUILD_VENVS=true UV_LOCK_TIMEOUT=3600 uv run examples/run_grpo.py \
   policy.dtensor_cfg.expert_parallel_size=4 \
   policy.generation.vllm_cfg.tensor_parallel_size=4 \
   policy.generation.vllm_cfg.expert_parallel_size=4 \
+  grpo.max_num_steps=${NUM_STEPS} \
+  checkpointing.enabled=true \
   checkpointing.checkpoint_dir=${CONTAINER_RUN_DIR}/checkpoints \
-  logger.log_dir=${CONTAINER_RUN_DIR}/logs"
+  logger.log_dir=${CONTAINER_RUN_DIR}/logs \
+  logger.wandb_enabled=true \
+  logger.tensorboard_enabled=true \
+  logger.wandb.project=nemo-rl-super-3.5 \
+  logger.wandb.name=${RUN_NAME}"
 
 cd "${NEMO_RL}"
 sbatch \
@@ -226,10 +226,13 @@ sbatch \
   --job-name="${RUN_NAME}" \
   --time=04:00:00 \
   --gres=gpu:"${GPUS_PER_NODE}" \
+  --exclusive \
   ray.sub
 ```
 
-NeMo RL resumes from the latest complete checkpoint in the configured
-directory. The recipe's timeout checkpoint setting reserves time for a final
-save under a four-hour Slurm limit. To release an interactive allocation, run
-`scancel <jobid>` from the login/head node.
+Set `NUM_STEPS` to the number of optimizer updates for this allocation. NeMo RL
+resumes from the latest complete checkpoint in the configured directory, so
+resubmit the same command with the same `RUN_NAME` after a time limit. The
+recipe's timeout checkpoint setting reserves time for a final save under a
+four-hour Slurm limit. To release an interactive allocation, run `scancel
+<jobid>` from the login/head node.

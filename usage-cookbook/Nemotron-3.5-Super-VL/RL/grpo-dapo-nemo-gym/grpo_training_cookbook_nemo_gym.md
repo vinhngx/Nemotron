@@ -110,41 +110,38 @@ and the `math_with_judge_simple_agent` reference required by this recipe.
 > Slurm allocation and training container. Use only the host-side paths rooted
 > at `${SHARED_ROOT}`—the login node does **not** have a `/shared` path. The
 > training container sees that same host directory at `/shared`, as configured
-> later by `MOUNTS="${SHARED_ROOT}:/shared"`. Set `SHARED_ROOT`, `NEMO_RL`, and
+> later by `MOUNTS="/lustre:/lustre,${SHARED_ROOT}:/shared"`. Set `SHARED_ROOT`, `NEMO_RL`, and
 > `NEMOTRON_REPO` as described in the parent README before continuing.
 
 ```bash
 # Host-side paths: do not substitute the container's /shared mount here.
-export COOKBOOK_DIR="${NEMOTRON_REPO}/usage-cookbook/Nemotron-3.5-Super-VL/RL/grpo-dapo-nemo-gym"
+export DATA_DIR="${SHARED_ROOT}/data/dapo17k"
 export PREP_SCRIPT="${NEMOTRON_REPO}/usage-cookbook/Nemotron-3-Ultra/RL/grpo-dapo-nemo-gym/prepare_hf_dapo_data_for_nemo_gym.py"
 export HF_HOME="${HF_HOME:-${SHARED_ROOT}/.cache/huggingface}"
 export HF_DATASETS_CACHE="${HF_DATASETS_CACHE:-${HF_HOME}/datasets}"
 export HF_DATASET_ID=BytedTsinghua-SIA/DAPO-Math-17k
 
-# Install once on the login/head node if `python -c 'import datasets'` fails.
-python -m pip install --upgrade --user datasets
+mkdir -p "${HF_DATASETS_CACHE}" "${DATA_DIR}"
 
-mkdir -p "${HF_DATASETS_CACHE}" "${COOKBOOK_DIR}/dapo17k"
-
-python "${PREP_SCRIPT}" \
+uv run --with datasets python "${PREP_SCRIPT}" \
   --dataset "${HF_DATASET_ID}" \
   --split train \
   --cache-dir "${HF_DATASETS_CACHE}" \
-  --output "${COOKBOOK_DIR}/dapo17k/train.jsonl" \
+  --output "${DATA_DIR}/train.jsonl" \
   --limit 6400 \
   --strict
 
-python "${PREP_SCRIPT}" \
+uv run --with datasets python "${PREP_SCRIPT}" \
   --dataset "${HF_DATASET_ID}" \
   --split train \
   --cache-dir "${HF_DATASETS_CACHE}" \
   --skip 6400 \
-  --output "${COOKBOOK_DIR}/dapo17k/validation.jsonl" \
+  --output "${DATA_DIR}/validation.jsonl" \
   --limit 256 \
   --strict
 ```
 
-The resulting `dapo17k/train.jsonl` and `dapo17k/validation.jsonl` contain
+The resulting `${DATA_DIR}/train.jsonl` and `${DATA_DIR}/validation.jsonl` contain
 6,400 and 256 rows, respectively. The recipe requires both files even though
 the initial profile disables validation callbacks. Do not commit these generated
 data files to the cookbook repository.
@@ -166,7 +163,7 @@ export GPUS_PER_NODE=4
 export SLURM_ACCOUNT=<SLURM_ACCOUNT>
 export PARTITION=<SLURM_PARTITION>
 export CONTAINER=<SITE_ACCESSIBLE_SUPER_VL_NEMO_RL_IMAGE>
-export MOUNTS="${SHARED_ROOT}:/shared"
+export MOUNTS="/lustre:/lustre,${SHARED_ROOT}:/shared"
 export NRL_FORCE_REBUILD_VENVS=true
 export UV_LOCK_TIMEOUT=3600
 unset COMMAND
@@ -240,7 +237,7 @@ mkdir -p "${HOST_RUN_DIR}/logs" "${HOST_RUN_DIR}/checkpoints"
 export SLURM_ACCOUNT=<SLURM_ACCOUNT>
 export PARTITION=<SLURM_PARTITION>
 export CONTAINER=<SITE_ACCESSIBLE_SUPER_VL_NEMO_RL_IMAGE>
-export MOUNTS="${SHARED_ROOT}:/shared"
+export MOUNTS="/lustre:/lustre,${SHARED_ROOT}:/shared"
 export BASE_LOG_DIR="${HOST_RUN_DIR}/slurm"
 export NRL_FORCE_REBUILD_VENVS=true
 export UV_LOCK_TIMEOUT=3600

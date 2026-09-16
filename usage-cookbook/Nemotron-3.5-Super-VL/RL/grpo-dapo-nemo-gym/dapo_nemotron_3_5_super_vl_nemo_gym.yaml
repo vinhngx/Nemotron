@@ -108,9 +108,9 @@ data:
   shuffle: false
   num_workers: 0
   train:
-    # Generated on the login/head node with the shared Ultra DAPO converter:
-    # prepare_hf_dapo_data_for_nemo_gym.py --limit 6400.
-    data_path: /shared/code/Nemotron/usage-cookbook/Nemotron-3.5-Super-VL/RL/grpo-dapo-nemo-gym/dapo17k/train.jsonl
+    # Generated on the login/head node with the shared Ultra DAPO converter.
+    # Keep generated data outside the cookbook repository.
+    data_path: /shared/data/dapo17k/train.jsonl
     dataset_name: NemoGymDataset
     env_name: nemo_gym
     prompt_file: null
@@ -120,7 +120,7 @@ data:
   # --skip 6400 --limit 256. The shared GRPO setup requires this dataset object
   # even though the initial one-step profile disables validation callbacks.
   validation:
-    data_path: /shared/code/Nemotron/usage-cookbook/Nemotron-3.5-Super-VL/RL/grpo-dapo-nemo-gym/dapo17k/validation.jsonl
+    data_path: /shared/data/dapo17k/validation.jsonl
     dataset_name: NemoGymDataset
     env_name: nemo_gym
     prompt_file: null

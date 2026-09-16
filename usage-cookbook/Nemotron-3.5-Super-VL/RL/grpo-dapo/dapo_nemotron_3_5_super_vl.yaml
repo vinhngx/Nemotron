@@ -51,7 +51,8 @@ policy:
     num_nextn_predict_layers: 0
   train_micro_batch_size: 1
   logprob_batch_size: 1
-  logprob_chunk_size: 2048
+  # Keep log-probability chunks aligned with the Gym profile to bound memory.
+  logprob_chunk_size: 1024
   # Reserve up to 2,048 tokens for a mathematical derivation while retaining
   # room for the problem prompt.
   max_total_sequence_length: 4096
@@ -110,18 +111,24 @@ policy:
       tensor_parallel_size: 4
       expert_parallel_size: 4
       gpu_memory_utilization: 0.5
+      # Explicit for parity with the Gym profile; the base config inherits it.
+      max_model_len: ${policy.max_total_sequence_length}
       enforce_eager: true
+      # Avoid the experimental Mamba prefix-cache wake path.
+      enable_prefix_caching: false
       # Required for this architecture even for text-only prompts.
       skip_tokenizer_init: false
     vllm_kwargs:
+      # Super-VL's Mamba align cache uses a 2080-token block, so the inherited
+      # 2048-token scheduler limit is too small for engine initialization.
+      max_num_batched_tokens: 4096
       moe_backend: triton
+      disable_custom_all_reduce: true
       # Match the checkpoint's Mamba selective-state cache precision.
       mamba_ssm_cache_dtype: float32
       # This is a text-only run: avoid reserving image encoder-cache memory.
       skip_mm_profiling: true
       mm_processor_cache_gb: 0
-      limit_mm_per_prompt:
-        image: 1
 
 data:
   max_input_seq_length: 2048
