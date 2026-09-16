@@ -25,15 +25,17 @@ Published NeMo RL containers do not include this runtime, so use a site image
 built from this branch or a compatible image, then force Ray's worker virtual
 environments to rebuild.
 
-The production recipe defaults to 16 nodes x 8 GPUs. On 4-GPU nodes such as
-GB200 NVL72, request 16 nodes x 4 GPUs and set training EP plus vLLM TP/EP to
-4. Four 4-GPU nodes are the practical minimum for the reference configuration.
+The cookbook recipes default to the validated GB200 test configuration: four
+nodes x four GPUs, with training EP=4 and vLLM TP/EP=4. This is a validated
+starting point, not a universal hardware requirement. For other GPU models or
+memory capacities, adjust the node count, GPUs per node, and parallelism
+settings together to fit available memory. When scaling to additional 4-GPU
+nodes, retain EP/TP=4 and increase only the node count.
 
 | Workload | Nodes x GPUs | Training EP | vLLM TP / EP |
 | --- | --- | --- | --- |
-| Default recipe | 16 x 8 | 8 | 8 / 8 |
-| 4-GPU-node production layout | 16 x 4 | 4 | 4 / 4 |
-| Four-node reference configuration | 4 x 4 | 4 | 4 / 4 |
+| Default / validated GB200 test configuration | 4 x 4 | 4 | 4 / 4 |
+| Scale-out on 4-GPU nodes | N x 4, N >= 4 | 4 | 4 / 4 |
 
 Training EP must not span nodes. DeepEP's CUDA-IPC path requires
 `expert_parallel_size <= gpus_per_node`.
