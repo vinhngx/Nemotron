@@ -41,7 +41,7 @@ The container-side tree is therefore:
 |    |____RL                    <- NeMo RL, branch super-3.5-automodel
 |    |____Nemotron              <- Cookbook repository
 |____models
-|    |____NVIDIA-Nemotron-3.5-Super-EA-09112026
+|    |____NVIDIA-Nemotron-3.5-Super-VL-09212026
 |____data
 |    |____dapo17k
 |____runs
@@ -55,19 +55,18 @@ use `/shared` on the login node; it is the container mount point.
 export SHARED_ROOT=$(realpath </YOUR/SHARED/STORAGE>)
 export NEMO_RL="${SHARED_ROOT}/code/RL"
 export NEMOTRON_REPO="${SHARED_ROOT}/code/Nemotron"
-export MODEL_DIR="${SHARED_ROOT}/models/NVIDIA-Nemotron-3.5-Super-EA-09112026"
+export MODEL_DIR="${SHARED_ROOT}/models/NVIDIA-Nemotron-3.5-Super-VL-09212026"
 export HF_HOME="${SHARED_ROOT}/.cache/huggingface"
 ```
 
 ## Configuration overview
 
-The validated GB200 test configuration uses four nodes with four GPUs each. It
-starts four TP=4/EP=4 Gym-backed vLLM groups, collects DAPO-17k rollouts
-through the Responses API, processes `math_with_judge` rewards, and trains the
-colocated 16-GPU AutoModel policy. This is a validated reference configuration,
-not a universal hardware requirement: for other GPU models or memory
-capacities, adjust the node count, GPUs per node, and parallelism settings
-together to fit available memory.
+Use eight nodes with four GPUs each as the validated GB200 reference topology.
+It starts TP=4/EP=4 Gym-backed vLLM groups, collects DAPO-17k rollouts through
+the Responses API, processes `math_with_judge` rewards, and trains the
+colocated 32-GPU AutoModel policy. Four nodes are suitable only for limited
+pipe-cleaning: the native control repeatedly OOMed on update 2 even at a
+1,024-token generation budget.
 
 The included profile matches the native Super-VL DAPO rollout batch: 32 prompts
 x 16 generations, or 512 samples per policy update, with `max_new_tokens:
@@ -87,7 +86,7 @@ The checked-in recipe encodes the currently-supported Super VL training settings
   `mamba_ssm_cache_dtype: float32`, and `skip_mm_profiling: true`.
 - Both training EP and vLLM TP/EP are `4`, matching four GPUs per node. DeepEP
   expert parallelism must not cross nodes.
-- Generation and training are colocated across all 16 GPUs. vLLM releases
+- Generation and training are colocated across all 32 GPUs. vLLM releases
   memory while FusedAdam initializes and trains; a two-node policy slice OOMs
   at the first update.
 - The 512-sample rollout and policy batch (32 prompts x 16 generations) divides
@@ -97,6 +96,30 @@ Use the `super-3.5-automodel` NeMo RL branch and a compatible Super-VL image.
 After changing the branch, submodules, or image contents, set
 `NRL_FORCE_REBUILD_VENVS=true`; see the parent README for the shared storage,
 checkpoint, and container setup.
+
+## Reference timing and memory
+
+The following second-update measurement was collected on eight GB200 nodes (32
+GPUs total) with the local Super-VL EA checkpoint, Gym-prepared DAPO-17k, and
+the default 512-sample rollout (32 prompts x 16 generations). It excludes
+cluster allocation and model/service startup.
+
+| Metric | Observed value |
+| --- | --- |
+| End-to-end update | 325.96 s |
+| Gym-backed generation and reward collection | 221.90 s |
+| Policy training | 61.53 s |
+| Policy/reference log-probs | 7.90 s |
+| End-to-end throughput | 107.15 tokens/s/GPU |
+| Generation throughput | 157.40 tokens/s/GPU |
+| Sampled head-node memory peak | 146.4 GiB/GPU |
+
+Gym response lengths produce a long-tail generation phase, so wall time varies
+with the sampled prompts. Treat these values as an operational reference, not
+a convergence or capacity claim. The measurement completed two updates. The
+8x4 is the production reference; validate repeated-update memory on the exact
+container and hardware before changing topology or raising the production step
+count.
 
 ## Prepare DAPO-17k for Gym
 
@@ -155,12 +178,12 @@ production batch run. It provides a convenient environment for debugging the
 distributed setup, Gym services, generation, rewards, log-probability
 calculation, and policy refit before committing to a longer campaign.
 
-Request four exclusive four-GPU nodes from the login node. `ray.sub` emits an
+Request eight exclusive four-GPU nodes from the login node. `ray.sub` emits an
 attach helper when the allocation starts; use that helper to enter the job,
 not a direct `srun` attach.
 
 ```bash
-export NUM_NODES=4
+export NUM_NODES=8
 export GPUS_PER_NODE=4
 export SLURM_ACCOUNT=<SLURM_ACCOUNT>
 export PARTITION=<SLURM_PARTITION>
@@ -194,7 +217,7 @@ Inside that attached container, use fresh log paths on every attempt:
 ```bash
 export NEMO_RL=/shared/code/RL
 export RECIPE=/shared/code/Nemotron/usage-cookbook/Nemotron-3.5-Super-VL/RL/grpo-dapo-nemo-gym/dapo_nemotron_3_5_super_vl_nemo_gym.yaml
-export MODEL_DIR=/shared/models/NVIDIA-Nemotron-3.5-Super-EA-09112026
+export MODEL_DIR=/shared/models/NVIDIA-Nemotron-3.5-Super-VL-09212026
 export RUN_DIR=/shared/runs/nemotron-3.5-super-vl-nemo-gym-$(date +%Y%m%d-%H%M%S)
 mkdir -p "${RUN_DIR}"
 
@@ -202,7 +225,7 @@ cd "${NEMO_RL}"
 NRL_FORCE_REBUILD_VENVS=true UV_LOCK_TIMEOUT=3600 \
 uv run examples/nemo_gym/run_grpo_nemo_gym.py \
   --config "${RECIPE}" \
-  cluster.num_nodes=4 \
+  cluster.num_nodes=8 \
   cluster.gpus_per_node=4 \
   policy.model_name="${MODEL_DIR}" \
   policy.tokenizer.name="${MODEL_DIR}" \
@@ -226,7 +249,7 @@ COMMAND="kill <pid> [<pid> ...]" bash ./<jobid>-attach.sh
 Use indexed attach helpers for worker nodes. Release the allocation with
 `scancel <jobid>` when finished.
 
-## Four-node batch run
+## Eight-node batch run
 
 For an unattended run, submit the driver as `COMMAND` from the **login/head
 node**. Host paths are used before submission; the command itself runs in the
@@ -236,7 +259,7 @@ roughly 1.8 TB of shared storage.
 
 ```bash
 # Run on the login/head node, not inside the training container.
-export NUM_NODES=4
+export NUM_NODES=8
 export GPUS_PER_NODE=4
 export NUM_STEPS=<NUM_TRAINING_STEPS>
 export VAL_PERIOD=0  # Set a positive cadence for periodic validation.
@@ -258,7 +281,7 @@ if [ -f "${SHARED_ROOT}/.env" ]; then set -a && source "${SHARED_ROOT}/.env" && 
 
 export CONTAINER_NEMO_RL=/shared/code/RL
 export CONTAINER_RECIPE=/shared/code/Nemotron/usage-cookbook/Nemotron-3.5-Super-VL/RL/grpo-dapo-nemo-gym/dapo_nemotron_3_5_super_vl_nemo_gym.yaml
-export CONTAINER_MODEL_DIR=/shared/models/NVIDIA-Nemotron-3.5-Super-EA-09112026
+export CONTAINER_MODEL_DIR=/shared/models/NVIDIA-Nemotron-3.5-Super-VL-09212026
 export CONTAINER_RUN_DIR="/shared/runs/${RUN_NAME}"
 
 export COMMAND="cd ${CONTAINER_NEMO_RL} && \

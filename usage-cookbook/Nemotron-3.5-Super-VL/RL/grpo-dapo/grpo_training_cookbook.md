@@ -40,7 +40,7 @@ The container-side tree is therefore:
 |    |____RL                    <- NeMo RL, branch super-3.5-automodel
 |    |____Nemotron              <- Cookbook repository
 |____models
-|    |____NVIDIA-Nemotron-3.5-Super-EA-09112026
+|    |____NVIDIA-Nemotron-3.5-Super-VL-09212026
 |____data
 |    |____dapo17k
 |____runs
@@ -54,19 +54,19 @@ use `/shared` on the login node; it is the container mount point.
 export SHARED_ROOT=$(realpath </YOUR/SHARED/STORAGE>)
 export NEMO_RL="${SHARED_ROOT}/code/RL"
 export NEMOTRON_REPO="${SHARED_ROOT}/code/Nemotron"
-export MODEL_DIR="${SHARED_ROOT}/models/NVIDIA-Nemotron-3.5-Super-EA-09112026"
+export MODEL_DIR="${SHARED_ROOT}/models/NVIDIA-Nemotron-3.5-Super-VL-09212026"
 export HF_HOME="${SHARED_ROOT}/.cache/huggingface"
 ```
 
 ## Topology
 
-The cookbook configuration defaults to the validated GB200 test configuration:
-four nodes x four GPUs (16 GPUs total), with training EP=4 and vLLM TP/EP=4.
+Use the validated GB200 reference topology: eight nodes x four GPUs (32 GPUs
+total), with training EP=4 and vLLM TP/EP=4.
 This matches the interactive and batch examples below. Keep the topology
 settings aligned when adapting the recipe:
 
 ```text
-cluster.num_nodes=4
+cluster.num_nodes=8
 cluster.gpus_per_node=4
 policy.dtensor_cfg.expert_parallel_size=4
 policy.generation.vllm_cfg.tensor_parallel_size=4
@@ -77,17 +77,38 @@ Also keep `cluster.num_nodes` equal to the nodes requested from Slurm. The
 DeepEP group must stay within one node, so training EP must not exceed GPUs per
 node.
 
-This is a validated GB200 configuration, not a universal hardware requirement.
-For other GPU models or memory capacities, adjust the node count, GPUs per node,
-and parallelism settings together to fit available memory. When scaling to
-additional 4-GPU nodes, retain EP/TP=4 and increase only
-`cluster.num_nodes`; a single node can initialize parts of the runtime but will
-OOM at the first refit.
+Four nodes can initialize the runtime and complete one update, but the native
+recipe repeatedly OOMed during update 2 even with a 1,024-token generation
+budget. Use 8x4 for sustained training. When scaling 4-GPU nodes, retain
+EP/TP=4 and increase only `cluster.num_nodes`.
 
 The default profile uses a 2,048-token generation budget and a 4,096-token
 total sequence limit. This supports multi-step mathematical reasoning as a
 practical starting point; increase the limits only after reassessing memory
 capacity and task quality.
+
+## Reference timing and memory
+
+The following second-update measurement was collected on eight GB200 nodes (32
+GPUs total) with the local Super-VL EA checkpoint, DAPO-17k, and the default
+2,048-token generation budget. It excludes cluster allocation and model/service
+startup. The native path generated 1,536 candidates through dynamic sampling
+and retained 512 for the policy update.
+
+| Metric | Observed value |
+| --- | --- |
+| End-to-end update | 351.45 s |
+| Generation | 253.52 s |
+| Policy training | 52.36 s |
+| Policy/reference log-probs | 7.43 s |
+| End-to-end throughput | 93.53 tokens/s/GPU |
+| Generation throughput | 129.66 tokens/s/GPU |
+| Sampled head-node memory peak | 150.2 GiB/GPU |
+
+Treat these as an operational reference, not a convergence or capacity claim.
+The measurement completed two updates. Treat 8x4 as the reference for a
+production campaign; validate repeated-update memory on the exact container
+and hardware before changing topology or token budgets.
 
 ## Checkpoints and outputs
 
@@ -98,18 +119,18 @@ sections define their own recipe and run-output paths.
 The default recipe creates checkpoints. Each checkpoint is about 1.8 TB. Set a
 run-specific `checkpointing.checkpoint_dir` after confirming capacity.
 
-## Four-node interactive run
+## Eight-node interactive run
 
 Use this interactive run as the recommended clean-pipeline check before a
 production batch run. It provides a convenient environment for debugging the
 distributed setup, generation, rewards, log-probability calculation, and policy
 refit before committing to a longer campaign. The run executes one GRPO
-optimizer step on four 4-GPU nodes. Generation can take tens of minutes.
+optimizer step on eight 4-GPU nodes. Generation can take tens of minutes.
 
 Run from the login/head node:
 
 ```bash
-export NUM_NODES=4
+export NUM_NODES=8
 export GPUS_PER_NODE=4
 export SLURM_ACCOUNT=<SLURM_ACCOUNT>
 export PARTITION=<SLURM_PARTITION>
@@ -142,13 +163,13 @@ Inside the attached container, launch the reference configuration:
 ```bash
 export NEMO_RL=/shared/code/RL
 export RECIPE=/shared/code/Nemotron/usage-cookbook/Nemotron-3.5-Super-VL/RL/grpo-dapo/dapo_nemotron_3_5_super_vl.yaml
-export MODEL_DIR=/shared/models/NVIDIA-Nemotron-3.5-Super-EA-09112026
+export MODEL_DIR=/shared/models/NVIDIA-Nemotron-3.5-Super-VL-09212026
 
 cd "${NEMO_RL}"
 
 NRL_FORCE_REBUILD_VENVS=true UV_LOCK_TIMEOUT=3600 uv run examples/run_grpo.py \
   --config "${RECIPE}" \
-  cluster.num_nodes=4 \
+  cluster.num_nodes=8 \
   cluster.gpus_per_node=4 \
   policy.model_name="${MODEL_DIR}" \
   policy.tokenizer.name="${MODEL_DIR}" \
@@ -169,7 +190,7 @@ calculation, and `Training policy`, then print `Max number of steps has been
 reached`. This provides a fast confirmation of the complete distributed
 training path before launching a longer campaign.
 
-## Four-node batch run
+## Eight-node batch run
 
 For batch run mode, submit the same recipe through
 `ray.sub`. Checkpoints, validation, and W&B are enabled below; make sure the
@@ -177,7 +198,7 @@ checkpoint destination has multiple terabytes of available capacity.
 
 ```bash
 # Run on the login/head node, not inside the training container.
-export NUM_NODES=4
+export NUM_NODES=8
 export GPUS_PER_NODE=4
 export NUM_STEPS=<NUM_TRAINING_STEPS>
 export RUN_NAME=nemotron-3.5-super-vl-dapo-4n4g
@@ -198,7 +219,7 @@ if [ -f "${SHARED_ROOT}/.env" ]; then set -a && source "${SHARED_ROOT}/.env" && 
 
 export CONTAINER_NEMO_RL=/shared/code/RL
 export CONTAINER_RECIPE=/shared/code/Nemotron/usage-cookbook/Nemotron-3.5-Super-VL/RL/grpo-dapo/dapo_nemotron_3_5_super_vl.yaml
-export CONTAINER_MODEL_DIR=/shared/models/NVIDIA-Nemotron-3.5-Super-EA-09112026
+export CONTAINER_MODEL_DIR=/shared/models/NVIDIA-Nemotron-3.5-Super-VL-09212026
 export CONTAINER_RUN_DIR="/shared/runs/${RUN_NAME}"
 
 export COMMAND="cd ${CONTAINER_NEMO_RL} && \

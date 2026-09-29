@@ -6,8 +6,8 @@ backend. The supported workflow is **text-only** DAPO/GRPO with colocated vLLM
 generation. Although the checkpoint includes a RADIO vision tower, image RL is
 not supported on this backend yet.
 
-Both cookbook paths have completed one text-only optimizer update on the
-four-node GB200 reference topology. They are starting points, not convergence
+Both cookbook paths have completed two text-only optimizer updates on the
+eight-node GB200 reference topology. They are starting points, not convergence
 or quality validation; establish task-specific metrics before scaling a
 campaign. The NeMoGym path uses Gym-prepared DAPO-17k with the
 `math_with_judge` resource server.
@@ -24,17 +24,16 @@ Published NeMo RL containers do not include this runtime, so use a site image
 built from this branch or a compatible image, then force Ray's worker virtual
 environments to rebuild.
 
-The cookbook recipes default to the validated GB200 test configuration: four
-nodes x four GPUs, with training EP=4 and vLLM TP/EP=4. This is a validated
-starting point, not a universal hardware requirement. For other GPU models or
-memory capacities, adjust the node count, GPUs per node, and parallelism
-settings together to fit available memory. When scaling to additional 4-GPU
-nodes, retain EP/TP=4 and increase only the node count.
+Use eight nodes x four GPUs (32 GPUs) as the validated GB200 reference
+topology, with training EP=4 and vLLM TP/EP=4. Four nodes can complete a
+single update but repeatedly OOM during the second policy update, including at
+a 1,024-token generation budget; do not use 4x4 for sustained training.
 
 | Workload | Nodes x GPUs | Training EP | vLLM TP / EP |
 | --- | --- | --- | --- |
-| Default / validated GB200 test configuration | 4 x 4 | 4 | 4 / 4 |
-| Scale-out on 4-GPU nodes | N x 4, N >= 4 | 4 | 4 / 4 |
+| Validated GB200 reference configuration | 8 x 4 | 4 | 4 / 4 |
+| Limited single-update pipe-clean | 4 x 4 | 4 | 4 / 4 |
+| Scale-out on 4-GPU nodes | N x 4, N >= 8 | 4 | 4 / 4 |
 
 Training EP must not span nodes. DeepEP's CUDA-IPC path requires
 `expert_parallel_size <= gpus_per_node`.
@@ -50,7 +49,7 @@ layout:
 |    |____RL                    <- NeMo RL, branch super-3.5-automodel
 |    |____Nemotron              <- Cookbook repository
 |____models
-|    |____NVIDIA-Nemotron-3.5-Super-EA-09112026
+|    |____NVIDIA-Nemotron-3.5-Super-VL-09212026
 |____data
 |    |____dapo17k
 |____runs
@@ -63,7 +62,7 @@ From the login/head node, define the paths used by the remaining guides:
 export SHARED_ROOT=$(realpath </YOUR/SHARED/STORAGE>)
 export NEMO_RL="${SHARED_ROOT}/code/RL"
 export NEMOTRON_REPO="${SHARED_ROOT}/code/Nemotron"
-export MODEL_DIR="${SHARED_ROOT}/models/NVIDIA-Nemotron-3.5-Super-EA-09112026"
+export MODEL_DIR="${SHARED_ROOT}/models/NVIDIA-Nemotron-3.5-Super-VL-09212026"
 export HF_HOME="${SHARED_ROOT}/.cache/huggingface"
 ```
 
@@ -133,17 +132,14 @@ regenerate `/opt/nemo_rl_container_fingerprint` with
 
 ## Obtain the checkpoint
 
-The recipe defaults to the gated Hugging Face checkpoint
-`nvidia/nemotron-3.5-super-pre-ea-text-08282026`. The worked commands use the
-local EA checkpoint shown in the storage layout; it is the checkpoint used for
-the reference run. These are distinct artifacts: use one model directory and
-the matching tokenizer consistently, rather than mixing their paths. If using
-the recipe default, download it into a directory named for that artifact:
+The recipes and worked commands use the gated Hugging Face checkpoint
+`nvidia/NVIDIA-Nemotron-3.5-Super-VL-09212026`. Download it into the matching
+local model directory and use that same directory for both model and tokenizer:
 
 ```bash
-export HUB_MODEL_DIR="${SHARED_ROOT}/models/nemotron-3.5-super-pre-ea-text-08282026"
+export HUB_MODEL_DIR="${SHARED_ROOT}/models/NVIDIA-Nemotron-3.5-Super-VL-09212026"
 mkdir -p "${HUB_MODEL_DIR}" "${HF_HOME}"
-hf download nvidia/nemotron-3.5-super-pre-ea-text-08282026 \
+hf download nvidia/NVIDIA-Nemotron-3.5-Super-VL-09212026 \
   --local-dir "${HUB_MODEL_DIR}"
 ```
 
@@ -157,7 +153,7 @@ The checkpoint contains remote model code and 63 BF16 safetensors shards
   colocated trainer-to-vLLM IPC refit on GB200 clusters.
 - Checkpoints include FP32 master weights and optimizer state and are about
   1.8 TB each. Plan shared-storage capacity before enabling checkpointing.
-- Generation dominates step time. Begin with the included four-node reference
+- Generation dominates step time. Begin with the included eight-node reference
   configuration, then set run-specific step counts, checkpointing, validation,
   and observability for the target training program.
 
@@ -166,7 +162,7 @@ The checkpoint contains remote model code and 63 BF16 safetensors shards
 | Symptom | Check and action |
 | --- | --- |
 | vLLM fails during initialization | Keep `max_num_batched_tokens: 4096`; Super-VL's Mamba cache requires more than the inherited 2,048-token limit. |
-| OOM during policy refit | Use the colocated 4 nodes x 4 GPUs topology with EP/TP=4. Do not reduce the policy to two nodes. |
+| OOM during policy refit | Use the validated colocated 8 nodes x 4 GPUs topology with EP/TP=4. Four nodes are not steady-state safe for this recipe. |
 | Refit IPC failure | Remove `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` and restart the job. |
 | Worker environment errors after a branch or image change | Set `NRL_FORCE_REBUILD_VENVS=true` once to rebuild the worker environments. |
 | Environment setup waits on a lock | Use `UV_LOCK_TIMEOUT=3600`; avoid forcing a rebuild unless the branch or image changed. |
