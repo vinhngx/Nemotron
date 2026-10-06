@@ -96,7 +96,7 @@ Use a NeMo RL container built from the `super-v3.5-posttraining` branch, or a
 compatible prebuilt image newer than v0.7. This branch provides the Super VL
 Megatron model path, vLLM integration, NeMo Gym support, and colocated weight
 refit support used by this recipe. The checkout must include the refit ordering
-and level-2 vLLM sleep support described in the parent [`README.md`](../README.md).
+described in the parent [`README.md`](../README.md).
 
 No suitable prebuilt image was available when this guide was published. Build
 the image from the same checkout that will be mounted into the job:
@@ -168,8 +168,7 @@ sbatch \
 
 `--mem=0` requests all host memory on each node. Megatron and vLLM share all
 four nodes. During refit, NeMo RL temporarily moves optimizer state to host
-memory and uses level-2 vLLM sleep to discard stale rollout weights before the
-current policy weights are installed.
+memory before the current policy weights are installed.
 
 ### 2. Attach — login or head node
 

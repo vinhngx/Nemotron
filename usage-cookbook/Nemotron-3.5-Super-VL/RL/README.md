@@ -25,9 +25,7 @@ Megatron model path, compatible vLLM integration, and NeMo Gym support used by
 this cookbook.
 
 The four-node path requires a NeMo RL revision in which the Super VL refit
-calls `model.eval()` before moving Megatron parameter buffers to CPU. Its vLLM
-workers must also honor `NRL_VLLM_SLEEP_LEVEL=2`, which lets the colocated
-workers discard stale rollout weights before installing the updated policy.
+calls `model.eval()` before moving Megatron parameter buffers to CPU.
 
 The reference configuration uses 16 GB200 GPUs across four 4-GPU nodes. It
 trains with Megatron tensor parallelism 4 and expert parallelism 16 while
@@ -207,6 +205,6 @@ training job.
 | Megatron workers cannot import `transformers_modules` | Launch from the mounted NeMo RL checkout and put the shared `HF_MODULES_CACHE` on `PYTHONPATH`. |
 | A Gym service environment is missing | Rebuild with `prefetch_super35_all_envs.yaml`, or allow the first job to create the environment on shared storage. |
 | Model conversion repeats on every launch | Set `NRL_MEGATRON_CHECKPOINT_DIR` to a persistent shared directory. |
-| vLLM runs out of memory during refit | Keep TP=4, level-2 vLLM sleep, optimizer offload during refit, and the recipe's memory and sequence limits. |
+| vLLM runs out of memory during refit | Keep TP=4, optimizer offload during refit, and the recipe's memory and sequence limits. |
 | Validation does not cover the complete file | Leave `grpo.max_val_samples: null`; NeMo Gym derives the validation size from the JSONL file. |
 | Worker environments are stale after changing the image or branch | Remove the affected cached environment or set `NRL_FORCE_REBUILD_VENVS=true` for one launch. |
