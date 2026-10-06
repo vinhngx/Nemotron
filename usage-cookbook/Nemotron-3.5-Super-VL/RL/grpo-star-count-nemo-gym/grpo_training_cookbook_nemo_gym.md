@@ -4,7 +4,7 @@ Counting colored stars is a compact way to exercise the complete multimodal RL
 pipeline. The policy must inspect an image, identify the requested color, count
 the matching objects, and return an answer that an automatic verifier can
 score. This guide runs that task with full-weight GRPO, NeMo RL's Megatron
-backend, dedicated vLLM generation, and NeMo Gym.
+backend, colocated vLLM generation, and NeMo Gym.
 
 ## How the task works
 
@@ -57,9 +57,9 @@ uses the following settings:
 
 | Component | Setting |
 | --- | --- |
-| Compute | 5 nodes x 4 GPUs |
-| Training | 4 nodes, full-weight BF16, TP=4, EP=16 |
-| Generation | 1 dedicated node, vLLM TP=4 |
+| Compute | 4 nodes x 4 GPUs |
+| Training | Full-weight BF16, TP=4, EP=16 |
+| Generation | Colocated vLLM, TP=4 |
 | GRPO batch | 16 prompts x 8 responses |
 | Schedule | 10 updates; validation before RL and every 2 updates |
 | Sequence limit | 4,096 total tokens; 256 generated tokens |
@@ -94,8 +94,9 @@ inside the container. The recipe uses this layout:
 
 Use a NeMo RL container built from the `super-v3.5-posttraining` branch, or a
 compatible prebuilt image newer than v0.7. This branch provides the Super VL
-Megatron model path, vLLM integration, NeMo Gym support, and non-colocated
-collective weight synchronization used by this recipe.
+Megatron model path, vLLM integration, NeMo Gym support, and colocated weight
+refit support used by this recipe. The checkout must include the refit ordering
+and level-2 vLLM sleep support described in the parent [`README.md`](../README.md).
 
 No suitable prebuilt image was available when this guide was published. Build
 the image from the same checkout that will be mounted into the job:
@@ -146,7 +147,7 @@ to the shared filesystem root used by your cluster.
 Use the interactive path when trying the recipe for the first time or watching
 the training process directly.
 
-### 1. Reserve five nodes — login or head node
+### 1. Reserve four nodes — login or head node
 
 Run from the NeMo RL repository root:
 
@@ -154,7 +155,7 @@ Run from the NeMo RL repository root:
 cd "${NEMO_RL}"
 unset COMMAND
 sbatch \
-  --nodes=5 \
+  --nodes=4 \
   --account="${SLURM_ACCOUNT}" \
   --partition="${PARTITION}" \
   --job-name=super-vl-star-count \
@@ -165,10 +166,10 @@ sbatch \
   ray.sub
 ```
 
-`--mem=0` requests all host memory on each node. Four nodes host the full-weight
-Megatron policy, while the fifth node hosts the TP=4 vLLM generation engine.
-The two worker groups remain resident and exchange updated weights through the
-non-colocated collective path.
+`--mem=0` requests all host memory on each node. Megatron and vLLM share all
+four nodes. During refit, NeMo RL temporarily moves optimizer state to host
+memory and uses level-2 vLLM sleep to discard stale rollout weights before the
+current policy weights are installed.
 
 ### 2. Attach — login or head node
 
@@ -274,7 +275,7 @@ RUN
 export COMMAND
 
 sbatch \
-  --nodes=5 \
+  --nodes=4 \
   --account="${SLURM_ACCOUNT}" \
   --partition="${PARTITION}" \
   --job-name=super-vl-star-count \
