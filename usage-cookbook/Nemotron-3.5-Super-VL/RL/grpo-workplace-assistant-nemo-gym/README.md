@@ -45,6 +45,15 @@ change as the published dataset is revised; the snapshot used during this
 cookbook's initial validation contained 1,255 training tasks and 545
 validation tasks.
 
+Create a fixed-size validation file so evaluation cost remains stable across
+dataset revisions:
+
+```bash
+head -n 128 \
+  /shared/runs/super35-workplace-assistant/data/validation.jsonl \
+  > /shared/runs/super35-workplace-assistant/data/validation_128.jsonl
+```
+
 ## Run GRPO
 
 ```bash
@@ -55,11 +64,12 @@ python -u examples/nemo_gym/run_grpo_nemo_gym.py \
 ```
 
 The default schedule uses eight tasks and eight sampled trajectories per
-task, for 64 trajectories per optimizer update. It evaluates the complete
-held-out split before training, every five updates, and after the final
-update. The 16,384-token trajectory budget accommodates the 27 tool schemas,
-reasoning, tool results, and as many as six agent steps. Checkpointing is
-disabled because a full optimizer checkpoint is
+task, for 64 trajectories per optimizer update. Twenty updates sample 160
+training tasks and generate 1,280 trajectories. The run evaluates the fixed
+128-task held-out subset before training, every five updates, and after the
+final update. The 16,384-token trajectory budget accommodates the 27 tool
+schemas, reasoning, tool results, and as many as six agent steps.
+Checkpointing is disabled because a full optimizer checkpoint is
 approximately 1.4 TB; enable it only after provisioning sufficient storage.
 
 ## What the reward measures

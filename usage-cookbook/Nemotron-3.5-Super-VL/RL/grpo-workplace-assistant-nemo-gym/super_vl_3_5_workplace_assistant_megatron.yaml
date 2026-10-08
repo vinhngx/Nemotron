@@ -15,6 +15,7 @@ grpo:
   max_num_steps: 20
   normalize_rewards: true
   use_leave_one_out_baseline: true
+  skip_reference_policy_logprobs_calculation: true
   use_dynamic_sampling: false
   reward_shaping:
     enabled: false
@@ -94,7 +95,7 @@ data:
   train:
     data_path: /shared/runs/super35-workplace-assistant/data/train.jsonl
   validation:
-    data_path: /shared/runs/super35-workplace-assistant/data/validation.jsonl
+    data_path: /shared/runs/super35-workplace-assistant/data/validation_128.jsonl
   default:
     dataset_name: NemoGymDataset
     env_name: nemo_gym
