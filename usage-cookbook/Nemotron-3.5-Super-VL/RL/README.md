@@ -1,9 +1,8 @@
-# Nemotron 3.5 Super VL Star-Count RL Cookbook
+# Nemotron 3.5 Super VL RL Cookbooks
 
-This directory documents multimodal RL post-training for Nemotron 3.5 Super
+This directory documents full-weight RL post-training for Nemotron 3.5 Super
 VL with NeMo RL's Megatron backend, colocated vLLM generation, and NeMo Gym.
-The workflow applies full-weight GRPO to synthetic star-count images and
-evaluates exact-match accuracy on a deterministic held-out split.
+It includes a visual star-count task and a multi-step Workplace Assistant task.
 
 The [star-count training guide](grpo-star-count-nemo-gym/grpo_training_cookbook_nemo_gym.md)
 covers dataset generation, interactive and batch launch paths, monitoring,
@@ -11,7 +10,7 @@ and interpretation of the reference result. Its recipe uses a
 16 x 8 rollout batch on variable 800–1,200-pixel canvases containing 1–30
 colored stars.
 
-The [Workplace Assistant guide](grpo-workplace-assistant-nemo-gym/README.md)
+The [Workplace Assistant guide](grpo-workplace-assistant-nemo-gym/grpo_training_cookbook_nemo_gym.md)
 adapts the same four-node Super VL training topology to a six-step agent loop
 with 27 simulated workplace tools and deterministic final-state rewards. It is
 the starting point for integrating resettable Jira, Confluence, or other
@@ -81,6 +80,9 @@ inside the container. The recipe uses this layout:
 |____runs
 |    |____super35-star-count
 |         |____data            <- generated train and validation JSONL files
+|         |____logs            <- training and validation logs
+|    |____super35-workplace-assistant
+|         |____data            <- downloaded train and validation JSONL files
 |         |____logs            <- training and validation logs
 |____.cache
      |____huggingface          <- Hugging Face downloads
@@ -187,17 +189,23 @@ The model uses repository-provided remote code. Keep `MODEL_DIR`, the shared
 Hugging Face module cache, and the mounted NeMo RL source available to every
 Ray worker.
 
-## Run the recipe
+## Run a recipe
 
-Continue with the
+For multimodal perception and strict answer verification, continue with the
 [star-count NeMo Gym guide](grpo-star-count-nemo-gym/grpo_training_cookbook_nemo_gym.md)
 to generate the deterministic dataset and launch the four-node full-weight
 training job.
 
+For multi-step tool use and final-state verification, continue with the
+[Workplace Assistant NeMo Gym guide](grpo-workplace-assistant-nemo-gym/grpo_training_cookbook_nemo_gym.md)
+to download the public agentic dataset and launch the same four-node topology.
+
 ## Operational notes
 
-- The recipe evaluates before RL and every two steps through step 10.
-- The training and validation files are generated from disjoint seed ranges.
+- Star count evaluates before RL and every two steps through step 10.
+- Workplace Assistant evaluates before RL, every five steps, and after step
+  20 against a fixed 128-task subset.
+- The star-count training and validation files use disjoint seed ranges.
 - The first launch can spend several minutes converting the Hugging Face
   checkpoint into the cached Megatron representation.
 - Full-weight checkpoints are large. Checkpointing is disabled in the short
