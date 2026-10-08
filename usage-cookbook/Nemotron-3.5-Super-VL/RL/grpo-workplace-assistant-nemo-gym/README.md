@@ -57,7 +57,9 @@ python -u examples/nemo_gym/run_grpo_nemo_gym.py \
 The default schedule uses eight tasks and eight sampled trajectories per
 task, for 64 trajectories per optimizer update. It evaluates the complete
 held-out split before training, every five updates, and after the final
-update. Checkpointing is disabled because a full optimizer checkpoint is
+update. The 16,384-token trajectory budget accommodates the 27 tool schemas,
+reasoning, tool results, and as many as six agent steps. Checkpointing is
+disabled because a full optimizer checkpoint is
 approximately 1.4 TB; enable it only after provisioning sufficient storage.
 
 ## What the reward measures

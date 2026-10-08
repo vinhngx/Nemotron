@@ -44,7 +44,8 @@ policy:
     name: ${policy.model_name}
     chat_template: ${policy.model_name}/chat_template.jinja
   train_global_batch_size: 64
-  max_total_sequence_length: 8192
+  # The 27 tool schemas and six-step agent loop can exceed 8K tokens.
+  max_total_sequence_length: 16384
   offload_optimizer_for_refit: true
   megatron_cfg:
     tensor_model_parallel_size: 4
@@ -78,7 +79,7 @@ policy:
         tool_parser: qwen3_coder
         reasoning_parser: deepseek_r1
     vllm_kwargs:
-      max_num_batched_tokens: 8192
+      max_num_batched_tokens: 16384
       max_num_seqs: 4
     colocated:
       enabled: true
