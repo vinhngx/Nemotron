@@ -1,0 +1,129 @@
+# Nemotron 3.5 Super VL full-weight GRPO on the NeMo Gym Workplace Assistant.
+# Run with NVIDIA-NeMo/RL branch super-v3.5-posttraining.
+defaults: /opt/nemo-rl/examples/configs/recipes/vlm/vlm_grpo-nemotron-super-omni-120ba12b-16n8g-megatron-tp8ep16cp2-async-gym.v1.yaml
+
+cluster:
+  num_nodes: 4
+  gpus_per_node: 4
+
+grpo:
+  # Each update contains 8 tasks x 8 independently sampled trajectories.
+  num_prompts_per_step: 8
+  num_generations_per_prompt: 8
+  max_rollout_turns: 1
+  max_num_epochs: 1
+  max_num_steps: 20
+  normalize_rewards: true
+  use_leave_one_out_baseline: true
+  use_dynamic_sampling: false
+  reward_shaping:
+    enabled: false
+  reward_scaling:
+    enabled: false
+  val_period: 5
+  val_at_start: true
+  val_at_end: true
+  max_val_samples: null
+  val_num_generations_per_prompt: 1
+  invalid_tool_call_advantage: null
+  malformed_thinking_advantage: null
+  async_grpo:
+    enabled: false
+
+loss_fn:
+  reference_policy_kl_penalty: 0
+  token_level_loss: true
+
+checkpointing:
+  enabled: false
+  checkpoint_dir: /shared/runs/super35-workplace-assistant/checkpoints
+
+policy:
+  model_name: /shared/models/NVIDIA-Nemotron-3.5-Super-VL-09212026
+  tokenizer:
+    name: ${policy.model_name}
+    chat_template: ${policy.model_name}/chat_template.jinja
+  train_global_batch_size: 64
+  max_total_sequence_length: 8192
+  offload_optimizer_for_refit: true
+  megatron_cfg:
+    tensor_model_parallel_size: 4
+    expert_model_parallel_size: 16
+    context_parallel_size: 1
+    freeze_vision_model: false
+    freeze_vision_projection: false
+    checkpoint:
+      async_save: false
+    optimizer:
+      optimizer_cpu_offload: false
+      optimizer_offload_fraction: 0.0
+      overlap_cpu_optimizer_d2h_h2d: false
+    env_vars:
+      CUDA_LAUNCH_BLOCKING: '0'
+  generation:
+    max_new_tokens: 2048
+    temperature: 1.0
+    top_p: 1.0
+    val_temperature: 0.0
+    val_top_p: 1.0
+    vllm_cfg:
+      tensor_parallel_size: 4
+      gpu_memory_utilization: 0.4
+      enforce_eager: true
+      reset_encoder_cache_after_weight_update: true
+      http_server_serving_chat_kwargs:
+        chat_template: ${policy.tokenizer.chat_template}
+        chat_template_content_format: openai
+        enable_auto_tools: true
+        tool_parser: qwen3_coder
+        reasoning_parser: deepseek_r1
+    vllm_kwargs:
+      max_num_batched_tokens: 8192
+      max_num_seqs: 4
+    colocated:
+      enabled: true
+      resources:
+        gpus_per_node: 4
+        num_nodes: 4
+
+data:
+  max_input_seq_length: null
+  shuffle: true
+  num_workers: 0
+  train:
+    data_path: /shared/runs/super35-workplace-assistant/data/train.jsonl
+  validation:
+    data_path: /shared/runs/super35-workplace-assistant/data/validation.jsonl
+  default:
+    dataset_name: NemoGymDataset
+    env_name: nemo_gym
+    prompt_file: null
+    system_prompt_file: null
+    processor: nemo_gym_data_processor
+
+env:
+  should_use_nemo_gym: true
+  should_log_nemo_gym_responses: true
+  should_mask_flagged_samples: true
+  nemo_gym:
+    policy_max_input_tokens: ${policy.max_total_sequence_length}
+    config_paths:
+    - responses_api_models/vllm_model/configs/vllm_model_for_training.yaml
+    - resources_servers/workplace_assistant/configs/workplace_assistant.yaml
+    policy_model:
+      responses_api_models:
+        vllm_model:
+          uses_reasoning_parser: true
+          extra_body:
+            chat_template_kwargs:
+              enable_thinking: true
+
+logger:
+  log_dir: /shared/runs/super35-workplace-assistant/logs
+  wandb_enabled: true
+  tensorboard_enabled: false
+  monitor_gpus: true
+  wandb:
+    project: nemotron-super-vl-35-workplace-assistant
+    name: fullweight-grpo-8x8
+    log_nemo_gym_full_result_tables: false

@@ -11,6 +11,12 @@ and interpretation of the reference result. Its recipe uses a
 16 x 8 rollout batch on variable 800–1,200-pixel canvases containing 1–30
 colored stars.
 
+The [Workplace Assistant guide](grpo-workplace-assistant-nemo-gym/README.md)
+adapts the same four-node Super VL training topology to a six-step agent loop
+with 27 simulated workplace tools and deterministic final-state rewards. It is
+the starting point for integrating resettable Jira, Confluence, or other
+customer tool harnesses.
+
 > **Container requirement:** This recipe requires either a NeMo RL container
 > built from the `super-v3.5-posttraining` source branch or a prebuilt
 > [NGC NeMo RL image](https://catalog.ngc.nvidia.com/orgs/nvidia/-/containers/nemo-rl/-/tags)
