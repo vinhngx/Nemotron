@@ -72,6 +72,17 @@ schemas, reasoning, tool results, and as many as six agent steps.
 Checkpointing is disabled because a full optimizer checkpoint is
 approximately 1.4 TB; enable it only after provisioning sufficient storage.
 
+### Validation scope
+
+The four-node topology was validated end to end with a one-update smoke test:
+NeMo Gym completed multi-turn tool rollouts, NeMo RL performed a full-weight
+optimizer step, the updated weights were refit into vLLM, and final validation
+completed without a context-length or CUDA error. The four-task smoke subset
+scored 3/4 before and after the update. All four sampled training trajectories
+received the same reward, so that update had zero GRPO advantage; this result
+validates the integration path rather than training quality. Use the default
+8-by-8, 20-update schedule for a meaningful experiment.
+
 ## What the reward measures
 
 The verifier extracts the agent's executed function calls, applies the
