@@ -204,7 +204,7 @@ to download the public agentic dataset and launch the same four-node topology.
 
 - Star count evaluates before RL and every two steps through step 10.
 - Workplace Assistant evaluates before RL, every five steps, and after step
-  20 against a fixed 128-task subset.
+  20 against a fixed category-balanced 40-task subset.
 - The star-count training and validation files use disjoint seed ranges.
 - The first launch can spend several minutes converting the Hugging Face
   checkpoint into the cached Megatron representation.

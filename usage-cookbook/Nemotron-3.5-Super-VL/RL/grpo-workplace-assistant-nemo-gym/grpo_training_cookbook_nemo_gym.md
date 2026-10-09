@@ -53,15 +53,15 @@ uses the following settings:
 | Compute | 4 nodes x 4 GPUs |
 | Training | Full-weight BF16, TP=4, EP=16 |
 | Generation | Four colocated vLLM groups, each TP=4 |
-| GRPO batch | 8 tasks x 8 sampled trajectories |
+| GRPO batch | 32 tasks x 8 sampled trajectories |
 | Schedule | 20 updates; validation before RL, every 5 updates, and after training |
 | Agent horizon | Up to 6 model and tool steps |
 | Sequence limit | 16,384 total tokens; up to 2,048 generated tokens per model call |
-| Validation | Fixed 128-task subset, one deterministic trajectory per task |
+| Validation | Fixed category-balanced 40-task subset, one deterministic trajectory per task |
 | Checkpoints | Disabled |
 
-Each update generates 64 trajectories. The 20-update example samples 160
-training tasks and produces 1,280 trajectories. Training data is shuffled, so
+Each update generates 256 trajectories. The 20-update example samples 640
+training tasks and produces 5,120 trajectories. Training data is shuffled, so
 those tasks are sampled from the full training file. The 16,384-token limit
 accommodates the tool schemas, reasoning, tool results, and multi-step history.
 TP=4 shards dense and attention tensors within each node. EP=16 distributes
@@ -288,8 +288,29 @@ uv run --extra dev gym dataset collate \
   --download \
   +data_source=huggingface
 
-head -n 128 "${DATA_DIR}/validation.jsonl" \
-  > "${DATA_DIR}/validation_128.jsonl"
+python3 - "${DATA_DIR}/validation.jsonl" \
+  "${DATA_DIR}/validation_balanced_40.jsonl" <<'PY'
+import json
+import sys
+
+source, destination = sys.argv[1:]
+per_category = {}
+selected = []
+with open(source) as src:
+    for line in src:
+        row = json.loads(line)
+        category = row["category"]
+        if per_category.get(category, 0) < 8:
+            selected.append(row)
+            per_category[category] = per_category.get(category, 0) + 1
+
+if len(selected) != 40 or any(count != 8 for count in per_category.values()):
+    raise RuntimeError(f"expected 8 tasks from each of 5 categories: {per_category}")
+
+with open(destination, "w") as dst:
+    for row in selected:
+        dst.write(json.dumps(row) + "\n")
+PY
 
 cd "${NEMO_RL}"
 uv run --no-sync python -u examples/nemo_gym/run_grpo_nemo_gym.py \
@@ -353,8 +374,29 @@ if [[ ! -s "${DATA_DIR}/train.jsonl" || ! -s "${DATA_DIR}/validation.jsonl" ]]; 
     --download \
     +data_source=huggingface
 fi
-head -n 128 "${DATA_DIR}/validation.jsonl" \
-  > "${DATA_DIR}/validation_128.jsonl"
+python3 - "${DATA_DIR}/validation.jsonl" \
+  "${DATA_DIR}/validation_balanced_40.jsonl" <<'PY'
+import json
+import sys
+
+source, destination = sys.argv[1:]
+per_category = {}
+selected = []
+with open(source) as src:
+    for line in src:
+        row = json.loads(line)
+        category = row["category"]
+        if per_category.get(category, 0) < 8:
+            selected.append(row)
+            per_category[category] = per_category.get(category, 0) + 1
+
+if len(selected) != 40 or any(count != 8 for count in per_category.values()):
+    raise RuntimeError(f"expected 8 tasks from each of 5 categories: {per_category}")
+
+with open(destination, "w") as dst:
+    for row in selected:
+        dst.write(json.dumps(row) + "\n")
+PY
 
 cd "${NEMO_RL}"
 exec uv run --no-sync python -u examples/nemo_gym/run_grpo_nemo_gym.py \
@@ -395,14 +437,33 @@ reward, generation length, policy loss, step time, and refit timing. Because
 reward is based on final state, validation reward is the fraction of tasks for
 which the agent produced an equivalent workplace state.
 
-The four-node topology was validated end to end with a one-update smoke test.
-NeMo Gym completed multi-turn tool rollouts, NeMo RL performed a full-weight
-optimizer step, the updated weights were refit into vLLM, and final validation
-completed without a context-length or CUDA error. A four-task subset scored
-3/4 before and after the update. All four training trajectories received the
-same reward, so the GRPO advantages and policy loss were zero. This validates
-the integration path and does not establish learning quality. Use the default
-8-by-8, 20-update schedule and a larger held-out set to evaluate improvement.
+A four-node convergence run completed all 20 full-weight updates with 32
+prompts and eight generations per prompt. The same 40 held-out tasks were
+evaluated at every measurement point:
+
+| Policy | Correct | Accuracy | Change from baseline |
+| --- | ---: | ---: | ---: |
+| Before RL | 33/40 | 82.5% | — |
+| Step 5 | 36/40 | 90.0% | +7.5 points |
+| Step 10 | 36/40 | 90.0% | +7.5 points |
+| Step 15 | 34/40 | 85.0% | +2.5 points |
+| Step 20 | 35/40 | 87.5% | +5.0 points |
+
+The best measured result was 36/40, while the final policy retained a modest
+two-task improvement over baseline. With only 40 validation tasks, one answer
+moves accuracy by 2.5 points, so the differences among later measurements are
+noisy. The decline after step 10 also shows that higher rollout reward did not
+consistently improve held-out accuracy. Select a stopping point with held-out
+validation rather than training reward alone, and use a larger test set before
+making a product-quality claim.
+
+For predictable runtime, the published YAML uses one fixed 32-by-8 rollout
+batch per update. The measured campaign used dynamic sampling during its first
+five updates and fixed batches afterward, so treat the table as a sizing and
+directional reference rather than an exact expected curve. The uninterrupted
+step-5-to-step-20 segment completed in about 2 hours 43 minutes, including
+model startup and three validations. Checkpointing was disabled for that
+segment, so no step-20 weights were saved.
 
 ## Connect a Jira, Confluence, or custom harness
 
@@ -451,4 +512,4 @@ A useful reward progression is:
 | vLLM runs out of memory during refit | Preserve TP=4, optimizer offload during refit, and the recipe's colocated memory settings. |
 | Reward is always zero | Inspect tool parsing, tool errors, agent horizon, hidden verifier inputs, and whether each rollout starts from the expected state. |
 | GRPO loss is zero | Check reward diversity within each group of eight trajectories; leave-one-out advantages are zero when every reward matches. |
-| Validation takes too long | Use the fixed `validation_128.jsonl` subset or choose a smaller explicit subset for smoke testing. |
+| Validation takes too long | Use the fixed `validation_balanced_40.jsonl` subset or choose a smaller explicit subset for smoke testing. |

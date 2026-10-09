@@ -7,8 +7,8 @@ cluster:
   gpus_per_node: 4
 
 grpo:
-  # Each update contains 8 tasks x 8 independently sampled trajectories.
-  num_prompts_per_step: 8
+  # Each update contains 32 tasks x 8 independently sampled trajectories.
+  num_prompts_per_step: 32
   num_generations_per_prompt: 8
   max_rollout_turns: 1
   max_num_epochs: 1
@@ -44,7 +44,7 @@ policy:
   tokenizer:
     name: ${policy.model_name}
     chat_template: ${policy.model_name}/chat_template.jinja
-  train_global_batch_size: 64
+  train_global_batch_size: 256
   # The 27 tool schemas and six-step agent loop can exceed 8K tokens.
   max_total_sequence_length: 16384
   offload_optimizer_for_refit: true
@@ -81,7 +81,7 @@ policy:
         reasoning_parser: deepseek_r1
     vllm_kwargs:
       max_num_batched_tokens: 16384
-      max_num_seqs: 4
+      max_num_seqs: 32
     colocated:
       enabled: true
       resources:
@@ -95,7 +95,7 @@ data:
   train:
     data_path: /shared/runs/super35-workplace-assistant/data/train.jsonl
   validation:
-    data_path: /shared/runs/super35-workplace-assistant/data/validation_128.jsonl
+    data_path: /shared/runs/super35-workplace-assistant/data/validation_balanced_40.jsonl
   default:
     dataset_name: NemoGymDataset
     env_name: nemo_gym
